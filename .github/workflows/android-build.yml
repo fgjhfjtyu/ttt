@@ -1,0 +1,67 @@
+name: Android SoftEther build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Android-Port/**'
+      - 'scripts/**'
+      - '.github/workflows/android-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  assemble-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '15859902'
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+          packages: ''
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.2.12479018" \
+            "cmake;3.22.1"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Validate Android port wiring
+        run: python3 scripts/validate-android-port.py
+
+      # Run through bash so this works even if the executable bit is missing in Git.
+      - name: Fetch and prepare native SoftEther module
+        run: bash ./scripts/bootstrap-softether.sh
+
+      # The upstream module's OpenSSL submodule contains source headers but no
+      # generated OpenSSL 3 configuration header or Android static libraries.
+      - name: Build OpenSSL for Android ABIs
+        run: bash ./scripts/build-openssl-android.sh
+
+      - name: Compile Android debug APK
+        working-directory: Android-Port
+        run: gradle --no-daemon assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenSSTP-Android-SoftEther-debug
+          path: Android-Port/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
