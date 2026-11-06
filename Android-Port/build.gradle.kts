@@ -9,4 +9,12 @@ allprojects {
     extensions.extraProperties.set("compileSdkVersion", 36)
     extensions.extraProperties.set("minSdkVersion", 26)
     extensions.extraProperties.set("targetSdkVersion", 35)
+
+    // Keep transitive AndroidX Core dependencies compatible with AGP 8.9.2 / compileSdk 36.
+    configurations.configureEach {
+        resolutionStrategy.force(
+            "androidx.core:core:1.15.0",
+            "androidx.core:core-ktx:1.15.0"
+        )
+    }
 }
