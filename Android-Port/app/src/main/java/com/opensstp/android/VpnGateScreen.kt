@@ -61,7 +61,7 @@ class VpnGateScreen(
         val cached = VpnGate.cached(activity)
         if (cached != null) {
             servers = cached.first
-            subtitle.text = "ذخیره‌شده · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(cached.second))}"
+            subtitle.text = Lang.t("g_cached", DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(cached.second)))
             render()
         }
         refresh()
@@ -74,7 +74,7 @@ class VpnGateScreen(
         loading = true
         notice.visibility = View.VISIBLE
         notice.setTextColor(Ui.TEXT2)
-        notice.text = "در حال دریافت فهرست سرورها…"
+        notice.text = Lang.t("g_loading")
         executor.execute {
             val result = try {
                 Result.success(VpnGate.fetch(activity.applicationContext))
@@ -86,15 +86,13 @@ class VpnGateScreen(
                 if (!dialog.isShowing) return@runOnUiThread
                 result.onSuccess {
                     servers = it
-                    subtitle.text = "${it.size} سرور · همین حالا به‌روز شد"
+                    subtitle.text = Lang.t("g_updated", it.size)
                     notice.visibility = View.GONE
                     render()
                 }.onFailure {
                     notice.visibility = View.VISIBLE
                     notice.setTextColor(Ui.AMBER)
-                    notice.text = "دریافت فهرست ناموفق بود (${it.message ?: "خطا"}). " +
-                        "اگر vpngate.net در شبکهٔ شما بسته است، اول به یکی از سرورهای ذخیره‌شده وصل شوید و دوباره «↻» را بزنید، " +
-                        "یا متن CSV را از سایت کپی و با «چسباندن CSV» وارد کنید."
+                    notice.text = Lang.t("g_fail", it.message ?: Lang.t("error"))
                     render()
                 }
             }
@@ -106,11 +104,11 @@ class VpnGateScreen(
         val text = cm?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(activity)?.toString().orEmpty()
         val list = VpnGate.importCsv(activity, text)
         if (list.isEmpty()) {
-            Toast.makeText(activity, "در کلیپ‌بورد فهرست VPN Gate پیدا نشد.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(activity, Lang.t("g_no_csv"), Toast.LENGTH_SHORT).show()
             return
         }
         servers = list
-        subtitle.text = "${list.size} سرور · از کلیپ‌بورد"
+        subtitle.text = Lang.t("g_from_clip", list.size)
         notice.visibility = View.GONE
         render()
     }
@@ -123,15 +121,15 @@ class VpnGateScreen(
             textDirection = View.TEXT_DIRECTION_LTR
         }
         AlertDialog.Builder(activity)
-            .setTitle("آدرس منبع فهرست")
-            .setMessage("خروجی باید همان قالب CSV سایت VPN Gate باشد و آدرس با https:// شروع شود.")
+            .setTitle(Lang.t("g_src_title"))
+            .setMessage(Lang.t("g_src_msg"))
             .setView(input)
-            .setNeutralButton("پیش‌فرض") { _, _ ->
+            .setNeutralButton(Lang.t("g_default")) { _, _ ->
                 VpnGate.setSourceUrl(activity, VpnGate.DEFAULT_URL)
                 refresh()
             }
-            .setNegativeButton("انصراف", null)
-            .setPositiveButton("ذخیره") { _, _ ->
+            .setNegativeButton(Lang.t("cancel"), null)
+            .setPositiveButton(Lang.t("save")) { _, _ ->
                 VpnGate.setSourceUrl(activity, input.text.toString())
                 refresh()
             }
@@ -142,7 +140,7 @@ class VpnGateScreen(
 
     private fun dp(v: Int) = (v * activity.resources.displayMetrics.density).toInt()
 
-    private fun text(t: String, sp: Float, color: Int, bold: Boolean = false, gravity: Int = Gravity.RIGHT) =
+    private fun text(t: String, sp: Float, color: Int, bold: Boolean = false, gravity: Int = Lang.start) =
         TextView(activity).apply {
             text = t
             textSize = sp
@@ -165,7 +163,7 @@ class VpnGateScreen(
     private fun build() {
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
             setPadding(dp(16), dp(36), dp(16), dp(8))
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Ui.BG0, Ui.BG1))
         }
@@ -174,28 +172,28 @@ class VpnGateScreen(
         val header = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
         }
         val titles = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        titles.addView(text("سرورهای VPN Gate", 18f, Ui.TEXT, bold = true))
+        titles.addView(text(Lang.t("m_gate"), 18f, Ui.TEXT, bold = true))
         subtitle = text("", 11f, Ui.MUTED)
         titles.addView(subtitle)
         header.addView(titles, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val gap = { LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(8) } }
-        header.addView(iconButton(IconKind.CLIPBOARD, "چسباندن CSV از کلیپ‌بورد") { pasteCsv() }, gap())
-        header.addView(iconButton(IconKind.KEY, "تنظیم آدرس منبع") { editSource() }, gap())
-        header.addView(iconButton(IconKind.REFRESH, "به‌روزرسانی فهرست") { refresh() }, gap())
-        header.addView(iconButton(IconKind.CLOSE, "بستن") { dialog.dismiss() }, gap())
+        header.addView(iconButton(IconKind.CLIPBOARD, Lang.t("g_paste_csv")) { pasteCsv() }, gap())
+        header.addView(iconButton(IconKind.KEY, Lang.t("g_set_src")) { editSource() }, gap())
+        header.addView(iconButton(IconKind.REFRESH, Lang.t("g_refresh")) { refresh() }, gap())
+        header.addView(iconButton(IconKind.CLOSE, Lang.t("close")) { dialog.dismiss() }, gap())
         root.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         // Search
         val search = EditText(activity).apply {
-            hint = "جستجوی کشور یا نام سرور…"
+            hint = Lang.t("g_search")
             textSize = 14f
             setTextColor(Ui.TEXT)
             setHintTextColor(Ui.MUTED)
             setSingleLine(true)
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Lang.start or Gravity.CENTER_VERTICAL
             setPadding(dp(14), 0, dp(14), 0)
             background = Ui.shape(activity, Ui.FIELD, 14f, Ui.STROKE, 1f)
             addTextChangedListener(object : TextWatcher {
@@ -212,10 +210,10 @@ class VpnGateScreen(
         // Sort chips
         val chips = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
         }
         val map = LinkedHashMap<Sort, TextView>()
-        for ((s, title) in listOf(Sort.SCORE to "بهترین امتیاز", Sort.PING to "کمترین پینگ", Sort.SPEED to "سریع‌ترین")) {
+        for ((s, title) in listOf(Sort.SCORE to Lang.t("g_sort_score"), Sort.PING to Lang.t("g_sort_ping"), Sort.SPEED to Lang.t("g_sort_speed"))) {
             val chip = text(title, 12f, Ui.TEXT2, bold = true, gravity = Gravity.CENTER).apply {
                 setPadding(dp(14), dp(7), dp(14), dp(7))
                 isClickable = true
@@ -232,7 +230,7 @@ class VpnGateScreen(
 
         listBox = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
             setPadding(0, dp(4), 0, dp(16))
         }
         val scroll = ScrollView(activity).apply {
@@ -269,14 +267,14 @@ class VpnGateScreen(
             Sort.SPEED -> filtered.sortedByDescending { it.speedBps }
         }
         if (sorted.isEmpty()) {
-            listBox.addView(text("موردی پیدا نشد.", 13f, Ui.MUTED, gravity = Gravity.CENTER).apply { setPadding(0, dp(24), 0, 0) })
+            listBox.addView(text(Lang.t("g_none"), 13f, Ui.MUTED, gravity = Gravity.CENTER).apply { setPadding(0, dp(24), 0, 0) })
             return
         }
         for (s in sorted.take(150)) listBox.addView(row(s, countryFa(s)), LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = dp(8) })
         if (sorted.size > 150) {
-            listBox.addView(text("برای دیدن بقیه، جستجو کنید (${sorted.size - 150} مورد دیگر)", 12f, Ui.MUTED, gravity = Gravity.CENTER)
+            listBox.addView(text(Lang.t("g_more", sorted.size - 150), 12f, Ui.MUTED, gravity = Gravity.CENTER)
                 .apply { setPadding(0, dp(14), 0, 0) })
         }
     }
@@ -285,7 +283,7 @@ class VpnGateScreen(
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
             setPadding(dp(8), dp(10), dp(12), dp(10))
             isClickable = true
             background = Ui.ripple(activity, Ui.shape(activity, Ui.CARD, 18f, Ui.STROKE, 1f), 18f)
@@ -323,7 +321,7 @@ class VpnGateScreen(
         val already = savedAddresses.contains(s.address)
         val add = FrameLayout(activity).apply {
             isClickable = true
-            contentDescription = "ذخیرهٔ کانفیگ"
+            contentDescription = Lang.t("g_save_desc")
             background = Ui.ripple(activity, Ui.oval(Ui.alpha(Ui.ACCENT, 34)), 19f)
         }
         val addIcon = IconView(activity, if (already) IconKind.SAVE else IconKind.PLUS, Ui.ACCENT_SOFT)

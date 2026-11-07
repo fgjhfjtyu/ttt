@@ -119,11 +119,12 @@ class MainActivity : ComponentActivity() {
 
     private val vpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) startVpn()
-        else renderStatus("اجازهٔ ساخت تونل VPN داده نشد.", SoftEtherVpnService.STATE_DISCONNECTED)
+        else renderStatus(Lang.t("vpn_perm_denied"), SoftEtherVpnService.STATE_DISCONNECTED)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Lang.init(this)
         // Theme is stored in plain prefs (not the encrypted ones, which "Connect" may clear).
         Ui.applyTheme(getSharedPreferences("ui_prefs", MODE_PRIVATE).getBoolean("dark", true))
         window.setBackgroundDrawable(ColorDrawable(Ui.BG0))
@@ -142,7 +143,7 @@ class MainActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, backCallback)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
             setPadding(dp(20), dp(22), dp(20), dp(28))
         }
 
@@ -166,14 +167,14 @@ class MainActivity : ComponentActivity() {
         header.addView(titles, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val menuButton = FrameLayout(this).apply {
             isClickable = true
-            contentDescription = "منو"
+            contentDescription = Lang.t("menu")
             background = Ui.ripple(this@MainActivity, Ui.shape(this@MainActivity, Ui.CARD_HI, 14f, Ui.STROKE, 1f), 14f)
         }
         menuButton.addView(IconView(this, IconKind.MENU, Ui.ACCENT_SOFT), FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
         val themeIcon = IconView(this, if (Ui.dark) IconKind.SUN else IconKind.MOON, if (Ui.dark) Ui.AMBER else Ui.ACCENT_SOFT)
         val themeButton = FrameLayout(this).apply {
             isClickable = true
-            contentDescription = if (Ui.dark) "تغییر به حالت روشن" else "تغییر به حالت تاریک"
+            contentDescription = if (Ui.dark) Lang.t("to_light") else Lang.t("to_dark")
             background = Ui.ripple(this@MainActivity, Ui.shape(this@MainActivity, Ui.CARD_HI, 14f, Ui.STROKE, 1f), 14f)
             setOnClickListener { toggleTheme(themeIcon) }
         }
@@ -185,7 +186,7 @@ class MainActivity : ComponentActivity() {
         // ───────── Hero orb + status ─────────
         orb = PowerOrbView(this).apply {
             isClickable = true
-            contentDescription = "اتصال / قطع اتصال"
+            contentDescription = Lang.t("toggle_conn")
             setOnTouchListener { v, e ->
                 when (e.actionMasked) {
                     MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.94f).scaleY(0.94f).setDuration(90L).start()
@@ -197,11 +198,11 @@ class MainActivity : ComponentActivity() {
         root.addView(orb, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(220)).apply { topMargin = dp(10) })
 
         pillDot = View(this).apply { background = Ui.oval(Ui.IDLE) }
-        status = label("قطع است", 13f, Ui.TEXT2, bold = true, gravity = Gravity.CENTER).apply { maxLines = 2 }
+        status = label(Lang.t("disconnected"), 13f, Ui.TEXT2, bold = true, gravity = Gravity.CENTER).apply { maxLines = 2 }
         pill = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
             setPadding(dp(14), dp(8), dp(16), dp(8))
             background = Ui.shape(this@MainActivity, Ui.alpha(Ui.IDLE, 30), 22f, Ui.alpha(Ui.IDLE, 90), 1f)
         }
@@ -216,7 +217,7 @@ class MainActivity : ComponentActivity() {
             gravity = Gravity.CENTER_HORIZONTAL
             topMargin = dp(2)
         })
-        hint = label("برای اتصال، دکمهٔ بالا را لمس کنید", 12f, Ui.MUTED, gravity = Gravity.CENTER)
+        hint = label(Lang.t("tap_connect"), 12f, Ui.MUTED, gravity = Gravity.CENTER)
         root.addView(hint, params(top = 10))
 
         // ───────── Live speed cards (with mini charts) ─────────
@@ -238,7 +239,7 @@ class MainActivity : ComponentActivity() {
         val gateRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
             isClickable = true
             setPadding(dp(14), dp(12), dp(14), dp(12))
             background = Ui.ripple(this@MainActivity, Ui.shape(this@MainActivity, Ui.CARD, 18f, Ui.STROKE, 1f), 18f)
@@ -248,18 +249,18 @@ class MainActivity : ComponentActivity() {
         gateBadge.addView(IconView(this, IconKind.GLOBE, Ui.CYAN), FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
         gateRow.addView(gateBadge, LinearLayout.LayoutParams(dp(40), dp(40)))
         val gateTexts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        gateTexts.addView(label("سرورهای عمومی VPN Gate", 14f, Ui.TEXT, bold = true))
-        gateTexts.addView(label("انتخاب از فهرست همهٔ کشورها", 12f, Ui.TEXT2))
+        gateTexts.addView(label(Lang.t("gate_title"), 14f, Ui.TEXT, bold = true))
+        gateTexts.addView(label(Lang.t("gate_sub"), 12f, Ui.TEXT2))
         gateRow.addView(gateTexts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(12) })
         gateRow.addView(IconView(this, IconKind.CHEVRON, Ui.MUTED), LinearLayout.LayoutParams(dp(16), dp(16)))
         root.addView(gateRow, params(top = 18))
 
         // ───────── Connection form ─────────
         val form = card()
-        form.addView(sectionHeader("اطلاعات اتصال", null), match())
-        val serverField = buildField("سرور", IconKind.SERVER, "VPN Gate hostname or IP[:port]", input = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-        val userField = buildField("نام کاربری", IconKind.USER, "Username (VPN Gate: vpn)", input = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
-        val passField = buildField("رمز عبور", IconKind.LOCK, "Password (VPN Gate often blank)", isPassword = true)
+        form.addView(sectionHeader(Lang.t("conn_info"), null), match())
+        val serverField = buildField(Lang.t("server"), IconKind.SERVER, "VPN Gate hostname or IP[:port]", input = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+        val userField = buildField(Lang.t("username"), IconKind.USER, "Username (VPN Gate: vpn)", input = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
+        val passField = buildField(Lang.t("password"), IconKind.LOCK, "Password (VPN Gate often blank)", isPassword = true)
         server = serverField.edit.apply { setText(prefs.getString("server", "")) }
         username = userField.edit.apply { setText(prefs.getString("username", "vpn")) }
         password = passField.edit.apply { setText(prefs.getString("password", "")) }
@@ -276,13 +277,13 @@ class MainActivity : ComponentActivity() {
         val rememberRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
             isClickable = true
             setPadding(dp(2), dp(4), dp(2), dp(4))
             setOnClickListener { remember.toggle() }
         }
         val rememberText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        rememberText.addView(label("مرا به خاطر بسپار", 14f, Ui.TEXT))
+        rememberText.addView(label(Lang.t("remember"), 14f, Ui.TEXT))
         rememberText.addView(label("Remember me", 11f, Ui.MUTED))
         rememberRow.addView(rememberText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         rememberRow.addView(remember, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -304,7 +305,7 @@ class MainActivity : ComponentActivity() {
         // ───────── Saved configs (under the form; can be collapsed) ─────────
         configList = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
         }
         root.addView(configList, params(top = 24))
         root.addView(
@@ -357,12 +358,12 @@ class MainActivity : ComponentActivity() {
                 startService(
                     Intent(this, SoftEtherVpnService::class.java).setAction(SoftEtherVpnService.ACTION_DISCONNECT)
                 )
-                renderStatus("در حال قطع اتصال…", SoftEtherVpnService.STATE_DISCONNECTED)
+                renderStatus(Lang.t("disconnecting"), SoftEtherVpnService.STATE_DISCONNECTED)
                 return@setOnClickListener
             }
 
             if (server.text.isNullOrBlank()) {
-                server.error = "آدرس سرور را وارد کنید"
+                server.error = Lang.t("enter_server")
                 server.requestFocus()
                 return@setOnClickListener
             }
@@ -382,7 +383,7 @@ class MainActivity : ComponentActivity() {
             if (permissionIntent != null) vpnPermission.launch(permissionIntent) else startVpn()
         }
 
-        renderStatus("قطع است", SoftEtherVpnService.STATE_DISCONNECTED)
+        renderStatus(Lang.t("disconnected"), SoftEtherVpnService.STATE_DISCONNECTED)
 
         // Gentle staggered entrance
         if (savedInstanceState == null) {
@@ -458,12 +459,12 @@ class MainActivity : ComponentActivity() {
             putExtra(SoftEtherVpnService.EXTRA_PASSWORD, password.text.toString())
         }
         ContextCompat.startForegroundService(this, intent)
-        renderStatus("در حال اتصال به سرور…", SoftEtherVpnService.STATE_CONNECTING)
+        renderStatus(Lang.t("connecting"), SoftEtherVpnService.STATE_CONNECTING)
     }
 
     private fun renderStatus(message: String, state: String) {
         // The pill stays short while connected (the timer sits next to it); the drawer shows the full text.
-        status.text = if (state == SoftEtherVpnService.STATE_CONNECTED) "متصل" else message
+        status.text = if (state == SoftEtherVpnService.STATE_CONNECTED) Lang.t("connected") else message
         syncTimer(state)
         sessionCanBeStopped = state == SoftEtherVpnService.STATE_CONNECTED || state == SoftEtherVpnService.STATE_CONNECTING
         connectButton.text = if (sessionCanBeStopped) "Disconnect" else "Connect"
@@ -488,8 +489,8 @@ class MainActivity : ComponentActivity() {
         pillDot.background = Ui.oval(color)
         pill.background = Ui.shape(this, Ui.alpha(color, 30), 22f, Ui.alpha(color, 90), 1f)
         orb.setState(state)
-        hint.text = if (sessionCanBeStopped) "برای قطع اتصال، دکمهٔ بالا را لمس کنید"
-        else "برای اتصال، دکمهٔ بالا را لمس کنید"
+        hint.text = if (sessionCanBeStopped) Lang.t("tap_disconnect")
+        else Lang.t("tap_connect")
         // While connecting, keep the form editable; the native service validates server/port.
         connectButton.isEnabled = true
     }
@@ -497,26 +498,26 @@ class MainActivity : ComponentActivity() {
     private fun promptSaveConfig(prefs: SharedPreferences) {
         val serverValue = server.text.toString().trim()
         if (serverValue.isBlank()) {
-            server.error = "اول آدرس سرور را وارد کنید"
+            server.error = Lang.t("enter_server_first")
             server.requestFocus()
-            Toast.makeText(this, "آدرس سرور را وارد کنید و دوباره «ذخیرهٔ کانفیگ» را بزنید.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, Lang.t("enter_server_save"), Toast.LENGTH_SHORT).show()
             return
         }
 
         val nameInput = EditText(this).apply {
-            hint = "مثلاً سرور شخصی"
+            hint = Lang.t("name_hint")
             setSingleLine(true)
-            setText("کانفیگ ${readConfigs(prefs).length() + 1}")
+            setText(Lang.t("config_n", readConfigs(prefs).length() + 1))
         }
         AlertDialog.Builder(this)
-            .setTitle("ذخیرهٔ کانفیگ")
-            .setMessage("اطلاعات فعلی سرور، نام کاربری و رمز عبور ذخیره می‌شود.")
+            .setTitle(Lang.t("save_cfg_title"))
+            .setMessage(Lang.t("save_cfg_msg"))
             .setView(nameInput)
-            .setNegativeButton("انصراف", null)
-            .setPositiveButton("ذخیره") { _, _ ->
+            .setNegativeButton(Lang.t("cancel"), null)
+            .setPositiveButton(Lang.t("save")) { _, _ ->
                 val configName = nameInput.text.toString().trim()
                 if (configName.isBlank()) {
-                    Toast.makeText(this, "برای کانفیگ یک نام وارد کنید.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, Lang.t("need_name"), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 val configs = readConfigs(prefs)
@@ -537,7 +538,7 @@ class MainActivity : ComponentActivity() {
                 prefs.edit().putString("configs_json", configs.toString()).apply()
                 selectedConfig = configName
                 renderConfigs(prefs)
-                Toast.makeText(this, "کانفیگ «$configName» ذخیره شد.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, Lang.t("cfg_saved", configName), Toast.LENGTH_SHORT).show()
             }
             .show()
     }
@@ -575,7 +576,7 @@ class MainActivity : ComponentActivity() {
         val r = dp(28).toFloat()
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
             isClickable = true
             background = android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
@@ -616,7 +617,7 @@ class MainActivity : ComponentActivity() {
         top.addView(titles, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val closeButton = FrameLayout(this).apply {
             isClickable = true
-            contentDescription = "بستن منو"
+            contentDescription = Lang.t("close_menu")
             background = Ui.ripple(this@MainActivity, Ui.shape(this@MainActivity, Ui.alpha(Ui.BG0, 150), 14f, Ui.STROKE, 1f), 14f)
             setOnClickListener { closeDrawer() }
         }
@@ -625,7 +626,7 @@ class MainActivity : ComponentActivity() {
         head.addView(top, match())
 
         drawerStatusDot = View(this).apply { background = Ui.oval(Ui.IDLE) }
-        drawerStatus = label("قطع است", 12f, Ui.TEXT2, bold = true, gravity = Gravity.LEFT).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+        drawerStatus = label(Lang.t("disconnected"), 12f, Ui.TEXT2, bold = true, gravity = Gravity.LEFT).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         val statusRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -641,38 +642,39 @@ class MainActivity : ComponentActivity() {
         // Items
         val items = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
             setPadding(dp(12), dp(4), dp(12), dp(12))
         }
-        items.addView(drawerSection("کانفیگ‌ها"), params(top = 12, bottom = 6))
+        items.addView(drawerSection(Lang.t("sec_configs")), params(top = 12, bottom = 6))
         items.addView(
             drawerGroup(
-                drawerItem(IconKind.GLOBE, Ui.CYAN, "سرورهای VPN Gate", "فهرست عمومی همهٔ کشورها") { openVpnGate() },
-                drawerItem(IconKind.SAVE, Ui.ACCENT_SOFT, "ذخیرهٔ کانفیگ فعلی", "سرور و حساب را ذخیره کن") { promptSaveConfig(appPrefs) },
-                drawerItem(IconKind.SERVER, Ui.CYAN, "کانفیگ‌های ذخیره‌شده", "رفتن به فهرست کانفیگ‌ها") { showSavedConfigs() },
-                drawerItem(IconKind.EYE_OFF, Ui.AMBER, "نمایش / پنهان‌کردن لیست سرورها", "بازوبسته کردن فهرست زیر فرم") { setConfigsCollapsed(!configsCollapsed) },
-                drawerItem(IconKind.CLIPBOARD, Ui.GREEN, "وارد کردن از کلیپ‌بورد", "چسباندن آدرس سرور") { importFromClipboard() },
-                drawerItem(IconKind.SHARE, Ui.ACCENT2, "اشتراک‌گذاری سرور", "سرور و نام کاربری، بدون رمز") { shareServer() }
+                drawerItem(IconKind.GLOBE, Ui.CYAN, Lang.t("m_gate"), Lang.t("m_gate_sub")) { openVpnGate() },
+                drawerItem(IconKind.SAVE, Ui.ACCENT_SOFT, Lang.t("m_save"), Lang.t("m_save_sub")) { promptSaveConfig(appPrefs) },
+                drawerItem(IconKind.SERVER, Ui.CYAN, Lang.t("m_saved"), Lang.t("m_saved_sub")) { showSavedConfigs() },
+                drawerItem(IconKind.EYE_OFF, Ui.AMBER, Lang.t("m_toggle"), Lang.t("m_toggle_sub")) { setConfigsCollapsed(!configsCollapsed) },
+                drawerItem(IconKind.CLIPBOARD, Ui.GREEN, Lang.t("m_clip"), Lang.t("m_clip_sub")) { importFromClipboard() },
+                drawerItem(IconKind.SHARE, Ui.ACCENT2, Lang.t("m_share"), Lang.t("m_share_sub")) { shareServer() }
             ),
             match()
         )
 
-        items.addView(drawerSection("سیستم"), params(top = 16, bottom = 6))
+        items.addView(drawerSection(Lang.t("sec_system")), params(top = 16, bottom = 6))
         items.addView(
             drawerGroup(
-                drawerItem(IconKind.KEY, Ui.ACCENT_SOFT, "تنظیمات VPN اندروید", "اتصال همیشه روشن و قفل شبکه") { openSystemScreen(Settings.ACTION_VPN_SETTINGS) },
-                drawerItem(IconKind.BATTERY, Ui.AMBER, "بهینه‌سازی باتری", "زنده ماندن تونل در پس‌زمینه") { openSystemScreen(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS) }
+                drawerItem(IconKind.KEY, Ui.ACCENT_SOFT, Lang.t("m_vpnset"), Lang.t("m_vpnset_sub")) { openSystemScreen(Settings.ACTION_VPN_SETTINGS) },
+                drawerItem(IconKind.BATTERY, Ui.AMBER, Lang.t("m_battery"), Lang.t("m_battery_sub")) { openSystemScreen(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS) }
             ),
             match()
         )
 
-        items.addView(drawerSection("برنامه"), params(top = 16, bottom = 6))
+        items.addView(drawerSection(Lang.t("sec_app")), params(top = 16, bottom = 6))
         items.addView(
             drawerGroup(
-                drawerItem(IconKind.HELP, Ui.CYAN, "راهنما", "آموزش اتصال") { showHelp() },
-                drawerItem(IconKind.INFO, Ui.TEXT2, "دربارهٔ برنامه", "نسخه و مجوزها") { showAbout() },
-                drawerItem(IconKind.TRASH, Ui.RED, "پاک‌کردن اطلاعات ذخیره‌شده", "حذف حساب‌ها و کانفیگ‌ها", Ui.RED) { confirmClearData() },
-                drawerItem(IconKind.EXIT, Ui.TEXT2, "بستن برنامه", "VPN همچنان فعال می‌ماند") { finish() }
+                drawerItem(IconKind.GLOBE, Ui.ACCENT2, Lang.t("language"), Lang.t("language_sub")) { showLanguagePicker() },
+                drawerItem(IconKind.HELP, Ui.CYAN, Lang.t("m_help"), Lang.t("m_help_sub")) { showHelp() },
+                drawerItem(IconKind.INFO, Ui.TEXT2, Lang.t("m_about"), Lang.t("m_about_sub")) { showAbout() },
+                drawerItem(IconKind.TRASH, Ui.RED, Lang.t("m_clear"), Lang.t("m_clear_sub"), Ui.RED) { confirmClearData() },
+                drawerItem(IconKind.EXIT, Ui.TEXT2, Lang.t("m_exit"), Lang.t("m_exit_sub")) { finish() }
             ),
             match()
         )
@@ -700,7 +702,7 @@ class MainActivity : ComponentActivity() {
     private fun drawerGroup(vararg rows: View): LinearLayout {
         val group = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
             background = Ui.shape(this@MainActivity, Ui.GROUP_FILL, 22f, Ui.GROUP_STROKE, 1f)
         }
         rows.forEachIndexed { i, row ->
@@ -729,7 +731,7 @@ class MainActivity : ComponentActivity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
             isClickable = true
             setPadding(dp(14), dp(10), dp(14), dp(10))
             background = Ui.ripple(this@MainActivity, Ui.shape(this@MainActivity, Color.TRANSPARENT, 18f), 18f)
@@ -743,7 +745,7 @@ class MainActivity : ComponentActivity() {
         row.addView(badge, LinearLayout.LayoutParams(dp(40), dp(40)))
         val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         texts.addView(label(title, 14f, titleColor, bold = true))
-        texts.addView(label(subtitle, 12f, Ui.TEXT2, gravity = Gravity.RIGHT).apply {
+        texts.addView(label(subtitle, 12f, Ui.TEXT2, gravity = Lang.start).apply {
             textDirection = View.TEXT_DIRECTION_RTL
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.END
@@ -766,7 +768,7 @@ class MainActivity : ComponentActivity() {
 
     private fun showSavedConfigs() {
         if (readConfigs(appPrefs).length() == 0) {
-            toast("هنوز کانفیگی ذخیره نشده است.")
+            toast(Lang.t("no_saved"))
             return
         }
         if (configsCollapsed) setConfigsCollapsed(false)
@@ -789,25 +791,25 @@ class MainActivity : ComponentActivity() {
             ?.trim()
             .orEmpty()
         if (raw.isBlank()) {
-            toast("کلیپ‌بورد خالی است.")
+            toast(Lang.t("clip_empty"))
             return
         }
         val firstToken = raw.lineSequence().first().trim().split(Regex("\\s+")).first()
         val value = firstToken.substringAfter("://").substringBefore('/')
         if (value.isBlank() || value.length > 255 || !value.matches(Regex("[A-Za-z0-9._:\\[\\]-]+"))) {
-            toast("متن کلیپ‌بورد شبیه آدرس سرور نیست.")
+            toast(Lang.t("clip_not_server"))
             return
         }
         server.setText(value)
         selectedConfig = null
         renderConfigs(appPrefs)
-        toast("آدرس سرور از کلیپ‌بورد وارد شد.")
+        toast(Lang.t("clip_imported"))
     }
 
     private fun shareServer() {
         val serverValue = server.text.toString().trim()
         if (serverValue.isBlank()) {
-            toast("اول آدرس سرور را وارد کنید.")
+            toast(Lang.t("enter_server_first"))
             return
         }
         val text = "Open-SSTP\nServer: $serverValue\nUsername: ${username.text.toString().trim()}"
@@ -816,9 +818,9 @@ class MainActivity : ComponentActivity() {
             putExtra(Intent.EXTRA_TEXT, text)
         }
         try {
-            startActivity(Intent.createChooser(send, "اشتراک‌گذاری سرور"))
+            startActivity(Intent.createChooser(send, Lang.t("share_title")))
         } catch (_: ActivityNotFoundException) {
-            toast("برنامه‌ای برای اشتراک‌گذاری پیدا نشد.")
+            toast(Lang.t("no_share_app"))
         }
     }
 
@@ -826,21 +828,34 @@ class MainActivity : ComponentActivity() {
         try {
             startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (_: Exception) {
-            toast("این صفحه روی این گوشی در دسترس نیست.")
+            toast(Lang.t("page_unavailable"))
         }
+    }
+
+    /** Language picker: stores the choice and rebuilds the screen in the new language/direction. */
+    private fun showLanguagePicker() {
+        closeDrawer()
+        val names = Lang.LANGS.map { it.nativeName }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(Lang.t("language"))
+            .setSingleChoiceItems(names, Lang.current) { dialog, which ->
+                dialog.dismiss()
+                if (which != Lang.current) {
+                    Lang.set(this, which)
+                    recreate()
+                }
+            }
+            .setNegativeButton(Lang.t("cancel"), null)
+            .show()
     }
 
     private fun showHelp() {
         AlertDialog.Builder(this)
-            .setTitle("راهنما")
+            .setTitle(Lang.t("help_title"))
             .setMessage(
-                "۱. آدرس سرور (مثلاً public-vpn-100.opengw.net یا host:port) را وارد کنید.\n" +
-                    "۲. برای سرورهای VPN Gate معمولاً نام کاربری vpn است و رمز عبور خالی می‌ماند.\n" +
-                    "۳. دکمهٔ بزرگ بالا یا «Connect» را بزنید و اجازهٔ VPN را تأیید کنید.\n" +
-                    "۴. برای استفادهٔ دوباره، از منو «ذخیرهٔ کانفیگ فعلی» را بزنید.\n" +
-                    "۵. اگر اتصال در پس‌زمینه قطع می‌شود، «بهینه‌سازی باتری» را از منو برای برنامه غیرفعال کنید."
+                Lang.t("help_body")
             )
-            .setPositiveButton("باشه", null)
+            .setPositiveButton(Lang.t("ok"), null)
             .show()
     }
 
@@ -849,21 +864,18 @@ class MainActivity : ComponentActivity() {
         AlertDialog.Builder(this)
             .setTitle("Open-SSTP")
             .setMessage(
-                "SoftEther VPN for Android" + (if (ver.isBlank()) "" else "\nنسخه: $ver") +
-                    "\n\nاتصال با موتور بومی پروتکل SoftEther و سرویس VpnService اندروید انجام می‌شود. " +
-                    "اطلاعات ورود فقط به‌صورت رمزگذاری‌شده روی همین دستگاه نگه‌داری می‌شود.\n\n" +
-                    "مجوز اجزای متن‌باز در فایل THIRD_PARTY.md پروژه آمده است."
+                "SoftEther VPN for Android" + (if (ver.isBlank()) "" else "\n${Lang.t("version")}: $ver") + "\n\n" + Lang.t("about_extra")
             )
-            .setPositiveButton("باشه", null)
+            .setPositiveButton(Lang.t("ok"), null)
             .show()
     }
 
     private fun confirmClearData() {
         AlertDialog.Builder(this)
-            .setTitle("پاک‌کردن اطلاعات")
-            .setMessage("همهٔ کانفیگ‌ها و اطلاعات ورود ذخیره‌شده حذف شوند؟ این کار برگشت‌پذیر نیست.")
-            .setNegativeButton("انصراف", null)
-            .setPositiveButton("پاک کن") { _, _ ->
+            .setTitle(Lang.t("clear_title"))
+            .setMessage(Lang.t("clear_msg"))
+            .setNegativeButton(Lang.t("cancel"), null)
+            .setPositiveButton(Lang.t("clear_btn")) { _, _ ->
                 appPrefs.edit().clear().apply()
                 selectedConfig = null
                 server.setText("")
@@ -871,7 +883,7 @@ class MainActivity : ComponentActivity() {
                 password.setText("")
                 remember.isChecked = false
                 renderConfigs(appPrefs)
-                toast("اطلاعات ذخیره‌شده پاک شد.")
+                toast(Lang.t("cleared"))
             }
             .show()
     }
@@ -890,9 +902,9 @@ class MainActivity : ComponentActivity() {
         val configs = readConfigs(prefs)
         if (configs.length() == 0) return
 
-        val headerRow = sectionHeader("کانفیگ‌های ذخیره‌شده", configs.length().toString()).apply {
+        val headerRow = sectionHeader(Lang.t("saved_configs"), configs.length().toString()).apply {
             isClickable = true
-            contentDescription = if (configsCollapsed) "نمایش لیست سرورها" else "پنهان‌کردن لیست سرورها"
+            contentDescription = if (configsCollapsed) Lang.t("show_list") else Lang.t("hide_list")
             setPadding(0, dp(6), 0, dp(6))
             setOnClickListener { setConfigsCollapsed(!configsCollapsed) }
         }
@@ -905,7 +917,7 @@ class MainActivity : ComponentActivity() {
         configList.addView(headerRow, params(bottom = 4))
         if (configsCollapsed) return
         configList.addView(
-            label("↻ سنجش دوبارهٔ پینگ (TCP واقعی)", 12f, Ui.ACCENT_SOFT, bold = true).apply {
+            label(Lang.t("ping_again"), 12f, Ui.ACCENT_SOFT, bold = true).apply {
                 setPadding(dp(4), dp(6), dp(4), dp(2))
                 isClickable = true
                 setOnClickListener {
@@ -922,7 +934,7 @@ class MainActivity : ComponentActivity() {
 
         for (i in 0 until configs.length()) {
             val item = configs.optJSONObject(i) ?: continue
-            val configName = item.optString("name", "کانفیگ ${i + 1}")
+            val configName = item.optString("name", Lang.t("config_n", i + 1))
             val configServer = item.optString("server", "")
             val selected = configName == selectedConfig
             val hi = if (selected && sessionCanBeStopped) Ui.GREEN else Ui.ACCENT
@@ -930,7 +942,7 @@ class MainActivity : ComponentActivity() {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                layoutDirection = Lang.dir
                 setPadding(dp(8), dp(10), dp(12), dp(10))
                 isClickable = true
                 background = Ui.ripple(
@@ -950,7 +962,7 @@ class MainActivity : ComponentActivity() {
                     username.setText(item.optString("username", "vpn"))
                     password.setText(item.optString("password", ""))
                     renderConfigs(prefs)
-                    Toast.makeText(this@MainActivity, "کانفیگ «$configName» انتخاب شد.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, Lang.t("cfg_selected", configName), Toast.LENGTH_SHORT).show()
                 }
             }
 
@@ -993,13 +1005,13 @@ class MainActivity : ComponentActivity() {
 
             val deleteButton = FrameLayout(this).apply {
                 isClickable = true
-                contentDescription = "حذف $configName"
+                contentDescription = Lang.t("delete_desc", configName)
                 background = Ui.ripple(this@MainActivity, Ui.oval(Ui.alpha(Ui.RED, 28)), 19f)
                 setOnClickListener {
                     AlertDialog.Builder(this@MainActivity)
-                        .setMessage("کانفیگ «$configName» حذف شود؟")
-                        .setNegativeButton("انصراف", null)
-                        .setPositiveButton("حذف") { _, _ ->
+                        .setMessage(Lang.t("delete_ask", configName))
+                        .setNegativeButton(Lang.t("cancel"), null)
+                        .setPositiveButton(Lang.t("delete")) { _, _ ->
                             val current = readConfigs(prefs)
                             val updated = JSONArray()
                             for (j in 0 until current.length()) {
@@ -1060,7 +1072,7 @@ class MainActivity : ComponentActivity() {
             background = Ui.shape(this@MainActivity, Ui.alpha(color, 30), 10f)
             isClickable = true
             if (result is PingProbe.Result.Ok) {
-                contentDescription = "کمینه ${result.minMs} میلی‌ثانیه، ${result.received} از ${result.sent} بسته پاسخ داد"
+                contentDescription = Lang.t("ping_desc", result.minMs, result.received, result.sent)
             }
             setOnClickListener { startPing(serverValue, force = true) }
         }
@@ -1106,7 +1118,7 @@ class MainActivity : ComponentActivity() {
                 password.setText("vpn")
                 selectedConfig = null
                 renderConfigs(appPrefs)
-                toast("سرور ${Flags.displayName(s.countryCode, s.countryName)} انتخاب شد. برای اتصال دکمه را بزنید.")
+                toast(Lang.t("gate_picked", Flags.displayName(s.countryCode, s.countryName)))
             },
             onSave = { s -> saveVpnGateServer(s) }
         ).show()
@@ -1119,7 +1131,7 @@ class MainActivity : ComponentActivity() {
         for (i in 0 until configs.length()) {
             val e = configs.optJSONObject(i) ?: continue
             if (e.optString("server") == s.address) {
-                toast("این سرور قبلاً ذخیره شده است.")
+                toast(Lang.t("already_saved"))
                 return false
             }
             names.add(e.optString("name"))
@@ -1134,7 +1146,7 @@ class MainActivity : ComponentActivity() {
         )
         appPrefs.edit().putString("configs_json", configs.toString()).apply()
         renderConfigs(appPrefs)
-        toast("«$name» ذخیره شد.")
+        toast(Lang.t("name_saved", name))
         return true
     }
 
@@ -1149,7 +1161,7 @@ class MainActivity : ComponentActivity() {
             val result = try {
                 PingProbe.measure(appContext, serverValue)
             } catch (e: Exception) {
-                PingProbe.Result.Failed("خطا")
+                PingProbe.Result.Failed(Lang.t("error"))
             }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
@@ -1177,7 +1189,7 @@ class MainActivity : ComponentActivity() {
 
     // ───────── UI building blocks ─────────
 
-    private fun label(t: String, sp: Float, color: Int, bold: Boolean = false, gravity: Int = Gravity.RIGHT): TextView =
+    private fun label(t: String, sp: Float, color: Int, bold: Boolean = false, gravity: Int = Lang.start): TextView =
         TextView(this).apply {
             text = t
             textSize = sp
@@ -1188,7 +1200,7 @@ class MainActivity : ComponentActivity() {
 
     private fun card(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        layoutDirection = Lang.dir
         setPadding(dp(16), dp(16), dp(16), dp(16))
         background = Ui.shape(this@MainActivity, Ui.CARD, 22f, Ui.STROKE, 1f)
     }
@@ -1196,7 +1208,7 @@ class MainActivity : ComponentActivity() {
     private fun sectionHeader(title: String, badge: String?): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        layoutDirection = Lang.dir
         addView(label(title, 13f, Ui.TEXT2, bold = true))
         if (badge != null) {
             addView(
@@ -1249,7 +1261,7 @@ class MainActivity : ComponentActivity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = Lang.dir
             setPadding(dp(8), 0, dp(14), 0)
             background = Ui.shape(this@MainActivity, Ui.FIELD, 14f, Ui.STROKE, 1f)
         }
@@ -1264,7 +1276,7 @@ class MainActivity : ComponentActivity() {
             background = null
             inputType = if (isPassword) InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD else input
             isSingleLine = true
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Lang.start or Gravity.CENTER_VERTICAL
             setPadding(dp(10), 0, dp(10), 0)
         }
         row.addView(edit, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
@@ -1273,7 +1285,7 @@ class MainActivity : ComponentActivity() {
             var visible = false
             val eye = FrameLayout(this).apply {
                 isClickable = true
-                contentDescription = "نمایش رمز عبور"
+                contentDescription = Lang.t("show_password")
                 background = Ui.ripple(this@MainActivity, Ui.oval(Color.TRANSPARENT), 19f)
             }
             val eyeIcon = IconView(this, IconKind.EYE, Ui.MUTED)
