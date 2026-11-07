@@ -120,7 +120,7 @@ object Ui {
 
 enum class IconKind {
     PLUS, CLOSE, ARROW_DOWN, ARROW_UP, SERVER, USER, LOCK, EYE, EYE_OFF, SHIELD,
-    MENU, SAVE, CLIPBOARD, SHARE, KEY, BATTERY, TRASH, INFO, HELP, EXIT, CHEVRON, SUN, MOON
+    MENU, SAVE, CLIPBOARD, SHARE, KEY, BATTERY, TRASH, INFO, HELP, EXIT, CHEVRON, SUN, MOON, GLOBE, REFRESH
 }
 
 /** Tiny vector icon set drawn on a 24x24 grid, so no drawable resources are needed. */
@@ -281,6 +281,18 @@ class IconView(context: Context, private var kind: IconKind, private var tint: I
                 outer.op(cut, Path.Op.DIFFERENCE)
                 paint.style = Paint.Style.FILL
                 canvas.drawPath(outer, paint)
+            }
+            IconKind.GLOBE -> {
+                canvas.drawCircle(12f, 12f, 9f, paint)
+                rect.set(8f, 3f, 16f, 21f); canvas.drawOval(rect, paint)
+                canvas.drawLine(3f, 12f, 21f, 12f, paint)
+            }
+            IconKind.REFRESH -> {
+                rect.set(5f, 5f, 19f, 19f)
+                canvas.drawArc(rect, -60f, 270f, false, paint)
+                val head = Path()
+                head.moveTo(12f, 1.5f); head.lineTo(16f, 5f); head.lineTo(12f, 8.5f)
+                canvas.drawPath(head, paint)
             }
             IconKind.SHIELD -> {
                 val p = Path()
@@ -450,32 +462,75 @@ class PowerOrbView(context: Context) : View(context) {
     }
 }
 
-/** Countries we can draw a small round flag for (simple geometric flags, no image resources). */
-enum class Flag { GERMANY, KOREA, JAPAN, FRANCE, ITALY, NETHERLANDS, RUSSIA, IRAN }
-
+/**
+ * Country helpers. Everything is keyed by the two-letter ISO country code ("DE", "JP", ...).
+ * The code comes from the server's IP address (see [GeoLookup]) or, as a fallback, from the name
+ * the user gave the config.
+ */
 object Flags {
-    private val keywords: List<Pair<Flag, List<String>>> = listOf(
-        Flag.GERMANY to listOf("آلمان", "المان", "germany", "german", "deutsch"),
-        Flag.KOREA to listOf("کره", "korea"),
-        Flag.JAPAN to listOf("ژاپن", "japan"),
-        Flag.FRANCE to listOf("فرانسه", "france"),
-        Flag.ITALY to listOf("ایتالیا", "italy"),
-        Flag.NETHERLANDS to listOf("هلند", "netherlands", "holland"),
-        Flag.RUSSIA to listOf("روسیه", "russia"),
-        Flag.IRAN to listOf("ایران", "iran")
+    private val aliases: List<Pair<String, List<String>>> = listOf(
+        "DE" to listOf("آلمان", "المان", "germany", "german", "deutsch"),
+        "KR" to listOf("کره", "korea"),
+        "JP" to listOf("ژاپن", "japan"),
+        "FR" to listOf("فرانسه", "france"),
+        "IT" to listOf("ایتالیا", "italy"),
+        "NL" to listOf("هلند", "netherlands", "holland"),
+        "RU" to listOf("روسیه", "russia"),
+        "IR" to listOf("ایران", "iran"),
+        "US" to listOf("آمریکا", "امریکا", "usa", "united states", "america"),
+        "GB" to listOf("انگلیس", "بریتانیا", "england", "britain", "united kingdom"),
+        "AE" to listOf("امارات", "emirates", "uae"),
+        "TR" to listOf("ترکیه", "turkey", "türkiye")
     )
 
-    /** Guess a flag from the config name the user chose (e.g. "آلمان", "Japan 2"). */
-    fun forName(name: String): Flag? {
+    /** Country display names (Persian + English) for every ISO country, built once on first use. */
+    private val nameIndex: List<Pair<String, String>> by lazy {
+        val fa = java.util.Locale("fa")
+        val list = ArrayList<Pair<String, String>>()
+        for (cc in java.util.Locale.getISOCountries()) {
+            val loc = java.util.Locale("", cc)
+            for (n in listOf(loc.getDisplayCountry(fa), loc.getDisplayCountry(java.util.Locale.ENGLISH))) {
+                if (n.length >= 4 && n != cc) list.add(n.lowercase() to cc)
+            }
+        }
+        // Longest names first so "south africa" wins over a shorter accidental match.
+        list.sortedByDescending { it.first.length }
+    }
+
+    /** Guess a country code from a config name the user chose (e.g. "آلمان", "Japan 2"). */
+    fun forName(name: String): String? {
         val n = name.lowercase()
-        return keywords.firstOrNull { (_, words) -> words.any { n.contains(it) } }?.first
+        aliases.firstOrNull { (_, words) -> words.any { n.contains(it) } }?.let { return it.first }
+        return nameIndex.firstOrNull { n.contains(it.first) }?.second
+    }
+
+    /** Country name in Persian (falls back to [fallback] / the code itself). */
+    fun displayName(cc: String, fallback: String = ""): String {
+        val n = java.util.Locale("", cc).getDisplayCountry(java.util.Locale("fa"))
+        return if (n.isNotBlank() && n != cc) n else fallback.ifBlank { cc }
+    }
+
+    /** The flag as an emoji built from the two regional-indicator letters. */
+    fun emoji(cc: String): String? {
+        if (cc.length != 2) return null
+        val up = cc.uppercase()
+        if (up.any { it !in 'A'..'Z' }) return null
+        val sb = StringBuilder()
+        for (c in up) sb.appendCodePoint(0x1F1E6 + (c - 'A'))
+        return sb.toString()
     }
 }
 
-class FlagView(context: Context, private val flag: Flag) : View(context) {
+/**
+ * A round flag. A handful of countries are drawn as crisp geometric flags; every other country uses
+ * its flag emoji cropped to a circle. If the device has no glyph for it, the country code is shown.
+ */
+class FlagView(context: Context, countryCode: String) : View(context) {
+    private val cc = countryCode.uppercase()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val clip = Path()
     private val rect = RectF()
+    private val emoji = Flags.emoji(cc)
 
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
@@ -497,19 +552,19 @@ class FlagView(context: Context, private val flag: Flag) : View(context) {
             }
         }
 
-        when (flag) {
-            Flag.GERMANY -> bands(true, 0xFF111111.toInt(), 0xFFD6262D.toInt(), 0xFFF5C400.toInt())
-            Flag.FRANCE -> bands(false, 0xFF1F4FB8.toInt(), 0xFFFFFFFF.toInt(), 0xFFD6262D.toInt())
-            Flag.ITALY -> bands(false, 0xFF1E9E5A.toInt(), 0xFFFFFFFF.toInt(), 0xFFD6262D.toInt())
-            Flag.NETHERLANDS -> bands(true, 0xFFAE1C28.toInt(), 0xFFFFFFFF.toInt(), 0xFF21468B.toInt())
-            Flag.RUSSIA -> bands(true, 0xFFFFFFFF.toInt(), 0xFF0039A6.toInt(), 0xFFD52B1E.toInt())
-            Flag.IRAN -> bands(true, 0xFF239F40.toInt(), 0xFFFFFFFF.toInt(), 0xFFDA0000.toInt())
-            Flag.JAPAN -> {
+        when (cc) {
+            "DE" -> bands(true, 0xFF111111.toInt(), 0xFFD6262D.toInt(), 0xFFF5C400.toInt())
+            "FR" -> bands(false, 0xFF1F4FB8.toInt(), 0xFFFFFFFF.toInt(), 0xFFD6262D.toInt())
+            "IT" -> bands(false, 0xFF1E9E5A.toInt(), 0xFFFFFFFF.toInt(), 0xFFD6262D.toInt())
+            "NL" -> bands(true, 0xFFAE1C28.toInt(), 0xFFFFFFFF.toInt(), 0xFF21468B.toInt())
+            "RU" -> bands(true, 0xFFFFFFFF.toInt(), 0xFF0039A6.toInt(), 0xFFD52B1E.toInt())
+            "IR" -> bands(true, 0xFF239F40.toInt(), 0xFFFFFFFF.toInt(), 0xFFDA0000.toInt())
+            "JP" -> {
                 canvas.drawColor(0xFFF7F7F7.toInt())
                 paint.color = 0xFFBC002D.toInt()
                 canvas.drawCircle(w / 2f, h / 2f, r * 0.5f, paint)
             }
-            Flag.KOREA -> {
+            "KR" -> {
                 canvas.drawColor(0xFFF7F7F7.toInt())
                 rect.set(w / 2f - r * 0.5f, h / 2f - r * 0.5f, w / 2f + r * 0.5f, h / 2f + r * 0.5f)
                 paint.color = 0xFFCD2E3A.toInt()
@@ -517,6 +572,7 @@ class FlagView(context: Context, private val flag: Flag) : View(context) {
                 paint.color = 0xFF0047A0.toInt()
                 canvas.drawArc(rect, 0f, 180f, true, paint)
             }
+            else -> drawGeneric(canvas, w, h, r)
         }
         canvas.restore()
 
@@ -524,6 +580,30 @@ class FlagView(context: Context, private val flag: Flag) : View(context) {
         paint.strokeWidth = maxOf(1f, r * 0.06f)
         paint.color = Ui.DIM
         canvas.drawCircle(w / 2f, h / 2f, r - paint.strokeWidth / 2f, paint)
+    }
+
+    private fun drawGeneric(canvas: Canvas, w: Float, h: Float, r: Float) {
+        val glyph = emoji
+        if (glyph != null && paint.hasGlyph(glyph)) {
+            // Flag emoji are wider than tall and have margins; oversize and let the circle crop them.
+            canvas.drawColor(0xFFE9EDF3.toInt())
+            paint.style = Paint.Style.FILL
+            paint.color = Color.WHITE
+            paint.textSize = r * 2f * 1.35f
+            paint.textAlign = Paint.Align.CENTER
+            val fm = paint.fontMetrics
+            canvas.drawText(glyph, w / 2f, h / 2f - (fm.ascent + fm.descent) / 2f, paint)
+        } else {
+            canvas.drawColor(Ui.alpha(Ui.IDLE, 90))
+            paint.style = Paint.Style.FILL
+            paint.color = Ui.TEXT
+            paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+            paint.textSize = r * 0.9f
+            paint.textAlign = Paint.Align.CENTER
+            val fm = paint.fontMetrics
+            canvas.drawText(if (cc.length == 2) cc else "?", w / 2f, h / 2f - (fm.ascent + fm.descent) / 2f, paint)
+            paint.typeface = android.graphics.Typeface.DEFAULT
+        }
     }
 }
 

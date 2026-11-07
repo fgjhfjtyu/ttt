@@ -87,6 +87,9 @@ class MainActivity : ComponentActivity() {
     private val pingExecutor = Executors.newFixedThreadPool(3)
     private val pingCache = HashMap<String, PingProbe.Result>()
     private val pingInFlight = HashSet<String>()
+    private val geoInFlight = HashSet<String>()
+    private val geoFailed = HashSet<String>()
+    private var configsCollapsed = false
 
     private class Field(val block: View, val edit: EditText)
 
@@ -130,6 +133,7 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightStatusBars = !Ui.dark
             isAppearanceLightNavigationBars = !Ui.dark
         }
+        configsCollapsed = getSharedPreferences("ui_prefs", MODE_PRIVATE).getBoolean("configs_collapsed", false)
         val prefs = securePrefs()
         appPrefs = prefs
         backCallback = object : OnBackPressedCallback(false) {
@@ -230,12 +234,25 @@ class MainActivity : ComponentActivity() {
         metrics.addView(txCard.view, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(5) })
         root.addView(metrics, params(top = 18))
 
-        // ───────── Saved configs ─────────
-        configList = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        // ───────── VPN Gate browser ─────────
+        val gateRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
+            isClickable = true
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = Ui.ripple(this@MainActivity, Ui.shape(this@MainActivity, Ui.CARD, 18f, Ui.STROKE, 1f), 18f)
+            setOnClickListener { openVpnGate() }
         }
-        root.addView(configList, params(top = 24))
+        val gateBadge = FrameLayout(this).apply { background = Ui.shape(this@MainActivity, Ui.alpha(Ui.CYAN, 34), 12f) }
+        gateBadge.addView(IconView(this, IconKind.GLOBE, Ui.CYAN), FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
+        gateRow.addView(gateBadge, LinearLayout.LayoutParams(dp(40), dp(40)))
+        val gateTexts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        gateTexts.addView(label("سرورهای عمومی VPN Gate", 14f, Ui.TEXT, bold = true))
+        gateTexts.addView(label("انتخاب از فهرست همهٔ کشورها", 12f, Ui.TEXT2))
+        gateRow.addView(gateTexts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(12) })
+        gateRow.addView(IconView(this, IconKind.CHEVRON, Ui.MUTED), LinearLayout.LayoutParams(dp(16), dp(16)))
+        root.addView(gateRow, params(top = 18))
 
         // ───────── Connection form ─────────
         val form = card()
@@ -283,6 +300,13 @@ class MainActivity : ComponentActivity() {
             background = Ui.ripple(this@MainActivity, Ui.gradient(this@MainActivity, Ui.ACCENT, Ui.ACCENT2, 18f), 18f)
         }
         root.addView(connectButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)).apply { topMargin = dp(18) })
+
+        // ───────── Saved configs (under the form; can be collapsed) ─────────
+        configList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        }
+        root.addView(configList, params(top = 24))
         root.addView(
             label("Built-in SoftEther protocol engine. Enter a server and valid account details to connect.", 11f, Ui.MUTED, gravity = Gravity.CENTER),
             params(top = 14)
@@ -623,8 +647,10 @@ class MainActivity : ComponentActivity() {
         items.addView(drawerSection("کانفیگ‌ها"), params(top = 12, bottom = 6))
         items.addView(
             drawerGroup(
+                drawerItem(IconKind.GLOBE, Ui.CYAN, "سرورهای VPN Gate", "فهرست عمومی همهٔ کشورها") { openVpnGate() },
                 drawerItem(IconKind.SAVE, Ui.ACCENT_SOFT, "ذخیرهٔ کانفیگ فعلی", "سرور و حساب را ذخیره کن") { promptSaveConfig(appPrefs) },
                 drawerItem(IconKind.SERVER, Ui.CYAN, "کانفیگ‌های ذخیره‌شده", "رفتن به فهرست کانفیگ‌ها") { showSavedConfigs() },
+                drawerItem(IconKind.EYE_OFF, Ui.AMBER, "نمایش / پنهان‌کردن لیست سرورها", "بازوبسته کردن فهرست زیر فرم") { setConfigsCollapsed(!configsCollapsed) },
                 drawerItem(IconKind.CLIPBOARD, Ui.GREEN, "وارد کردن از کلیپ‌بورد", "چسباندن آدرس سرور") { importFromClipboard() },
                 drawerItem(IconKind.SHARE, Ui.ACCENT2, "اشتراک‌گذاری سرور", "سرور و نام کاربری، بدون رمز") { shareServer() }
             ),
@@ -743,7 +769,14 @@ class MainActivity : ComponentActivity() {
             toast("هنوز کانفیگی ذخیره نشده است.")
             return
         }
+        if (configsCollapsed) setConfigsCollapsed(false)
         scroll.post { scroll.smoothScrollTo(0, configList.top) }
+    }
+
+    private fun setConfigsCollapsed(collapsed: Boolean) {
+        configsCollapsed = collapsed
+        getSharedPreferences("ui_prefs", MODE_PRIVATE).edit().putBoolean("configs_collapsed", collapsed).apply()
+        renderConfigs(appPrefs)
     }
 
     private fun importFromClipboard() {
@@ -857,17 +890,34 @@ class MainActivity : ComponentActivity() {
         val configs = readConfigs(prefs)
         if (configs.length() == 0) return
 
-        configList.addView(sectionHeader("کانفیگ‌های ذخیره‌شده", configs.length().toString()), params(bottom = 4))
+        val headerRow = sectionHeader("کانفیگ‌های ذخیره‌شده", configs.length().toString()).apply {
+            isClickable = true
+            contentDescription = if (configsCollapsed) "نمایش لیست سرورها" else "پنهان‌کردن لیست سرورها"
+            setPadding(0, dp(6), 0, dp(6))
+            setOnClickListener { setConfigsCollapsed(!configsCollapsed) }
+        }
+        // Arrow at the far end: down = list is hidden (tap to show), up = list is shown (tap to hide).
+        headerRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        headerRow.addView(
+            IconView(this, IconKind.CHEVRON, Ui.ACCENT_SOFT).apply { rotation = if (configsCollapsed) -90f else 90f },
+            LinearLayout.LayoutParams(dp(22), dp(22))
+        )
+        configList.addView(headerRow, params(bottom = 4))
+        if (configsCollapsed) return
         configList.addView(
             label("↻ سنجش دوبارهٔ پینگ (TCP واقعی)", 12f, Ui.ACCENT_SOFT, bold = true).apply {
                 setPadding(dp(4), dp(6), dp(4), dp(2))
                 isClickable = true
-                setOnClickListener { for (i in 0 until configs.length()) configs.optJSONObject(i)?.let { startPing(it.optString("server", ""), force = true) } }
+                setOnClickListener {
+                    geoFailed.clear()
+                    for (i in 0 until configs.length()) configs.optJSONObject(i)?.let { startPing(it.optString("server", ""), force = true) }
+                }
             }
         )
         for (i in 0 until configs.length()) {
             val srv = configs.optJSONObject(i)?.optString("server", "") ?: ""
             if (srv.isNotBlank() && !pingCache.containsKey(srv)) startPing(srv)
+            if (srv.isNotBlank() && configs.optJSONObject(i)?.optString("cc", "").isNullOrBlank()) startGeo(srv)
         }
 
         for (i in 0 until configs.length()) {
@@ -904,9 +954,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            val flag = Flags.forName(configName)
-            if (flag != null) {
-                row.addView(FlagView(this, flag), LinearLayout.LayoutParams(dp(40), dp(40)))
+            // Country from the server's IP (stored in the config) first; the config name is only a fallback.
+            val flagCode = item.optString("cc", "").ifBlank { Flags.forName(configName) ?: "" }
+            if (flagCode.isNotBlank()) {
+                row.addView(FlagView(this, flagCode), LinearLayout.LayoutParams(dp(40), dp(40)))
             } else {
                 val avatar = FrameLayout(this).apply {
                     background = Ui.oval(Ui.alpha(if (selected) hi else Ui.IDLE, 38))
@@ -1013,6 +1064,78 @@ class MainActivity : ComponentActivity() {
             }
             setOnClickListener { startPing(serverValue, force = true) }
         }
+    }
+
+    /** Looks up the server's country from its IP and stores it in every saved config using that server. */
+    private fun startGeo(serverValue: String) {
+        if (serverValue.isBlank() || geoInFlight.contains(serverValue) || geoFailed.contains(serverValue)) return
+        geoInFlight.add(serverValue)
+        val appContext = applicationContext
+        pingExecutor.execute {
+            val cc = try { GeoLookup.countryOf(appContext, serverValue) } catch (_: Exception) { null }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                geoInFlight.remove(serverValue)
+                if (cc == null) {
+                    geoFailed.add(serverValue)
+                    return@runOnUiThread
+                }
+                val configs = readConfigs(appPrefs)
+                var changed = false
+                for (i in 0 until configs.length()) {
+                    val entry = configs.optJSONObject(i) ?: continue
+                    if (entry.optString("server") == serverValue && entry.optString("cc") != cc) {
+                        entry.put("cc", cc)
+                        changed = true
+                    }
+                }
+                if (changed) {
+                    appPrefs.edit().putString("configs_json", configs.toString()).apply()
+                    renderConfigs(appPrefs)
+                }
+            }
+        }
+    }
+
+    private fun openVpnGate() {
+        VpnGateScreen(
+            this,
+            onUse = { s ->
+                server.setText(s.address)
+                username.setText("vpn")
+                password.setText("vpn")
+                selectedConfig = null
+                renderConfigs(appPrefs)
+                toast("سرور ${Flags.displayName(s.countryCode, s.countryName)} انتخاب شد. برای اتصال دکمه را بزنید.")
+            },
+            onSave = { s -> saveVpnGateServer(s) }
+        ).show()
+    }
+
+    /** Adds a VPN Gate server to the saved configs (with its flag). Returns false if it already exists. */
+    private fun saveVpnGateServer(s: VpnGateServer): Boolean {
+        val configs = readConfigs(appPrefs)
+        val names = HashSet<String>()
+        for (i in 0 until configs.length()) {
+            val e = configs.optJSONObject(i) ?: continue
+            if (e.optString("server") == s.address) {
+                toast("این سرور قبلاً ذخیره شده است.")
+                return false
+            }
+            names.add(e.optString("name"))
+        }
+        val base = Flags.displayName(s.countryCode, s.countryName)
+        var name = base
+        var n = 2
+        while (names.contains(name)) name = "$base $n".also { n++ }
+        configs.put(
+            JSONObject().put("name", name).put("server", s.address)
+                .put("username", "vpn").put("password", "vpn").put("cc", s.countryCode)
+        )
+        appPrefs.edit().putString("configs_json", configs.toString()).apply()
+        renderConfigs(appPrefs)
+        toast("«$name» ذخیره شد.")
+        return true
     }
 
     private fun startPing(serverValue: String, force: Boolean = false) {

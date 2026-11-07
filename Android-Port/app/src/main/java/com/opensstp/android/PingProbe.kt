@@ -54,7 +54,7 @@ object PingProbe {
     }
 
     /** Picks a real internet network that is not the VPN, if one exists. */
-    private fun underlyingNetwork(context: Context): Network? = try {
+    internal fun underlyingNetwork(context: Context): Network? = try {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         @Suppress("DEPRECATION")
         cm.allNetworks.firstOrNull { net ->
