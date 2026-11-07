@@ -259,10 +259,10 @@ class MainActivity : ComponentActivity() {
         val form = card()
         form.addView(sectionHeader(Lang.t("conn_info"), null), match())
         val serverField = buildField(Lang.t("server"), IconKind.SERVER, "VPN Gate hostname or IP[:port]", input = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-        val userField = buildField(Lang.t("username"), IconKind.USER, "Username (VPN Gate: vpn)", input = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
+        val userField = buildField(Lang.t("username"), IconKind.USER, "Username", input = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
         val passField = buildField(Lang.t("password"), IconKind.LOCK, "Password (VPN Gate often blank)", isPassword = true)
         server = serverField.edit.apply { setText(prefs.getString("server", "")) }
-        username = userField.edit.apply { setText(prefs.getString("username", "vpn")) }
+        username = userField.edit.apply { setText(prefs.getString("username", "")) }
         password = passField.edit.apply { setText(prefs.getString("password", "")) }
         form.addView(serverField.block, params(top = 14))
         form.addView(userField.block, params(top = 12))
@@ -879,7 +879,7 @@ class MainActivity : ComponentActivity() {
                 appPrefs.edit().clear().apply()
                 selectedConfig = null
                 server.setText("")
-                username.setText("vpn")
+                username.setText("")
                 password.setText("")
                 remember.isChecked = false
                 renderConfigs(appPrefs)
@@ -959,7 +959,7 @@ class MainActivity : ComponentActivity() {
                 setOnClickListener {
                     selectedConfig = configName
                     server.setText(item.optString("server", ""))
-                    username.setText(item.optString("username", "vpn"))
+                    username.setText(item.optString("username", ""))
                     password.setText(item.optString("password", ""))
                     renderConfigs(prefs)
                     Toast.makeText(this@MainActivity, Lang.t("cfg_selected", configName), Toast.LENGTH_SHORT).show()

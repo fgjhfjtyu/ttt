@@ -47,7 +47,7 @@ class SoftEtherVpnService : VpnService() {
                     return START_NOT_STICKY
                 }
                 val rawServer = intent.getStringExtra(EXTRA_SERVER).orEmpty()
-                val username = intent.getStringExtra(EXTRA_USERNAME).orEmpty().ifBlank { "vpn" }
+                val username = intent.getStringExtra(EXTRA_USERNAME).orEmpty()
                 val password = intent.getStringExtra(EXTRA_PASSWORD).orEmpty()
                 val target = try {
                     parseServer(rawServer)
