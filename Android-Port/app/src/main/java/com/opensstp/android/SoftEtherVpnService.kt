@@ -89,6 +89,11 @@ class SoftEtherVpnService : VpnService() {
         // Byte counters measured at the packet bridge itself (independent of native stats).
         val rxBytes = AtomicLong(0L)
         val txBytes = AtomicLong(0L)
+        // Diagnostics: shows in logcat (tag OpenSSTP-VpnService) every 10 s to locate CPU use.
+        val rxCalls = AtomicLong(0L)
+        val rxEmpty = AtomicLong(0L)
+        val rxPackets = AtomicLong(0L)
+        val txPackets = AtomicLong(0L)
 
         try {
             client = SoftEtherClient()
@@ -177,13 +182,23 @@ class SoftEtherVpnService : VpnService() {
 
             // The native protocol uses blocking socket reads; keep the CPU awake while this
             // user-requested VPN session is active, especially with the screen off.
+            val powerManager = getSystemService(PowerManager::class.java)
             statsThread = Thread({
                 var previousTx = 0L
                 var previousRx = 0L
                 var previousTime = SystemClock.elapsedRealtime()
+                var ticks = 0
                 while (running && connected) {
                     try { Thread.sleep(STATS_INTERVAL_MS) } catch (_: InterruptedException) { break }
                     if (!running || !connected) break
+                    if (++ticks % 10 == 0) {
+                        Log.i(TAG, "diag/10s total: rxCalls=${rxCalls.get()} rxEmpty=${rxEmpty.get()} rxPkts=${rxPackets.get()} txPkts=${txPackets.get()}")
+                    }
+                    // Nobody sees the speed meter while the screen is off; skip the work.
+                    if (powerManager?.isInteractive == false) {
+                        previousTx = txBytes.get(); previousRx = rxBytes.get(); previousTime = SystemClock.elapsedRealtime()
+                        continue
+                    }
                     try {
                         val now = SystemClock.elapsedRealtime()
                         val elapsedMs = (now - previousTime).coerceAtLeast(1L)
@@ -206,11 +221,32 @@ class SoftEtherVpnService : VpnService() {
             inboundThread = Thread({
                 try {
                     val buffer = ByteArray(PACKET_BUFFER_SIZE)
+                    // Adaptive back-off: poll fast while traffic flows, slow down when idle so the
+                    // CPU is not woken ~200x/second for nothing (this caused the "high CPU" warning).
+                    var idleSleepMs = RECEIVE_IDLE_SLEEP_MIN_MS
                     while (running) {
+                        val startedAt = SystemClock.elapsedRealtime()
                         val count = sessionClient.nativeReceive(sessionHandle, buffer, buffer.size)
+                        rxCalls.incrementAndGet()
                         when {
-                            count > 0 -> { output.write(buffer, 0, count); rxBytes.addAndGet(count.toLong()) }
-                            count == 0 -> Thread.sleep(RECEIVE_IDLE_SLEEP_MS)
+                            count > 0 -> {
+                                output.write(buffer, 0, count); rxBytes.addAndGet(count.toLong())
+                                rxPackets.incrementAndGet()
+                                idleSleepMs = RECEIVE_IDLE_SLEEP_MIN_MS
+                            }
+                            count == 0 -> {
+                                rxEmpty.incrementAndGet()
+                                // The native side already waits (poll) up to ~100 ms when idle, so no
+                                // extra sleep is needed then. Back off only when it returned instantly
+                                // with nothing usable, which would otherwise spin the CPU.
+                                val waited = SystemClock.elapsedRealtime() - startedAt
+                                if (waited >= NATIVE_BLOCKED_MS) {
+                                    idleSleepMs = RECEIVE_IDLE_SLEEP_MIN_MS
+                                } else {
+                                    Thread.sleep(idleSleepMs)
+                                    idleSleepMs = (idleSleepMs * 2).coerceAtMost(RECEIVE_IDLE_SLEEP_MAX_MS)
+                                }
+                            }
                             else -> throw IOException("ارتباط داده‌ای SoftEther قطع شد.")
                         }
                     }
@@ -225,10 +261,11 @@ class SoftEtherVpnService : VpnService() {
                     while (running) {
                         val count = input.read(buffer)
                         if (count < 0) break
-                        if (count == 0) continue
+                        if (count == 0) { Thread.sleep(1L); continue }
                         val sent = sessionClient.nativeSendSlice(sessionHandle, buffer, 0, count)
                         if (sent != count) throw IOException("ارسال بسته به موتور SoftEther کامل نشد (sent=$sent, expected=$count).")
                         txBytes.addAndGet(count.toLong())
+                        txPackets.incrementAndGet()
                     }
                     if (running) throw IOException("ورودی تونل اندروید بسته شد.")
                 } catch (e: Exception) {
@@ -469,8 +506,10 @@ class SoftEtherVpnService : VpnService() {
         private const val TUN_MTU = 1400
         private const val IPV6_TUN_ADDRESS = "fd42:6f70:656e:5353::2"
         private const val PACKET_BUFFER_SIZE = 32768
-        private const val RECEIVE_IDLE_SLEEP_MS = 5L
+        private const val RECEIVE_IDLE_SLEEP_MIN_MS = 1L
+        private const val RECEIVE_IDLE_SLEEP_MAX_MS = 5L
         private const val STATS_INTERVAL_MS = 1000L
+        private const val NATIVE_BLOCKED_MS = 20L
 
         const val ACTION_CONNECT = "com.opensstp.android.CONNECT"
         const val ACTION_DISCONNECT = "com.opensstp.android.DISCONNECT"
