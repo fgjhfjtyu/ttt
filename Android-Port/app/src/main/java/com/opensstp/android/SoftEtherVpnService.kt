@@ -39,11 +39,17 @@ class SoftEtherVpnService : VpnService() {
         Thread(task, "opensstp-softether-session").apply { isDaemon = true }
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        Lang.init(this)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Lang.init(this)
         when (intent?.action) {
             ACTION_CONNECT -> {
                 if (running) {
-                    publishStatus("اتصال در حال انجام است", STATE_CONNECTING)
+                    publishStatus(Lang.t("svc_in_progress"), STATE_CONNECTING)
                     return START_NOT_STICKY
                 }
                 val rawServer = intent.getStringExtra(EXTRA_SERVER).orEmpty()
@@ -52,14 +58,14 @@ class SoftEtherVpnService : VpnService() {
                 val target = try {
                     parseServer(rawServer)
                 } catch (e: IllegalArgumentException) {
-                    publishStatus(e.message ?: "آدرس سرور معتبر نیست", STATE_DISCONNECTED)
+                    publishStatus(e.message ?: Lang.t("srv_port_bad"), STATE_DISCONNECTED)
                     stopSelf(startId)
                     return START_NOT_STICKY
                 }
 
                 running = true
-                startAsForeground("در حال اتصال به سرور SoftEther…")
-                publishStatus("در حال اتصال به ${target.host}:${target.port}", STATE_CONNECTING)
+                startAsForeground(Lang.t("connecting"))
+                publishStatus(Lang.t("svc_connecting_to", "${target.host}:${target.port}"), STATE_CONNECTING)
                 sessionExecutor.execute { runSession(target.host, target.port, username, password) }
             }
             ACTION_DISCONNECT -> {
@@ -68,7 +74,7 @@ class SoftEtherVpnService : VpnService() {
             }
             ACTION_QUERY -> {
                 val state = when { connected -> STATE_CONNECTED; running || nativeHandle != 0L -> STATE_CONNECTING; else -> STATE_DISCONNECTED }
-                publishStatus(when { connected -> "متصل"; running -> "در حال اتصال"; nativeHandle != 0L -> "در حال قطع اتصال"; else -> "قطع است" }, state)
+                publishStatus(when { connected -> Lang.t("connected"); running -> Lang.t("connecting"); nativeHandle != 0L -> Lang.t("disconnecting"); else -> Lang.t("disconnected") }, state)
                 if (!running && nativeHandle == 0L) stopSelfResult(startId)
             }
         }
@@ -98,7 +104,7 @@ class SoftEtherVpnService : VpnService() {
         try {
             client = SoftEtherClient()
             handle = client.nativeCreate()
-            if (handle == 0L) throw IOException("موتور بومی SoftEther نتوانست نشست ایجاد کند.")
+            if (handle == 0L) throw IOException(Lang.t("err_engine_create"))
             nativeClient = client
             nativeHandle = handle
 
@@ -128,21 +134,21 @@ class SoftEtherVpnService : VpnService() {
                 serverIpAddress = "",
                 serverPort = port
             )
-            if (!running) throw InterruptedException("اتصال توسط کاربر لغو شد.")
+            if (!running) throw InterruptedException(Lang.t("svc_cancelled"))
             if (connectResult != 0 || client.nativeGetState(handle) != NATIVE_STATE_CONNECTED) {
-                throw IOException("اتصال SoftEther انجام نشد (کد خطا: $connectResult). آدرس، پورت، Hub و اطلاعات ورود را بررسی کنید.")
+                throw IOException(Lang.t("err_connect_failed", connectResult))
             }
 
             // Protect every socket before adding the default routes to the Android VPN interface.
             protectNativeSockets(client, handle)
-            publishStatus("اتصال برقرار شد؛ دریافت تنظیمات IP از سرور…", STATE_CONNECTING)
+            publishStatus(Lang.t("svc_getting_ip"), STATE_CONNECTING)
 
             val lease = client.doDhcp(handle)
-                ?: throw IOException("سرور SoftEther اتصال را پذیرفت، اما DHCP نشانی IP معتبر نداد؛ تونل اینترنت ساخته نشد.")
+                ?: throw IOException(Lang.t("err_no_dhcp"))
             if (!isUsableIpv4(lease.assignedIp) || lease.prefixLength !in 1..32) {
-                throw IOException("پیکربندی IP دریافت‌شده از سرور معتبر نیست.")
+                throw IOException(Lang.t("err_bad_ip"))
             }
-            if (!running) throw InterruptedException("اتصال توسط کاربر لغو شد.")
+            if (!running) throw InterruptedException(Lang.t("svc_cancelled"))
 
             val builder = Builder()
                 .setSession("OpenSSTP — SoftEther VPN")
@@ -168,7 +174,7 @@ class SoftEtherVpnService : VpnService() {
                 builder.addDnsServer("8.8.8.8")
             }
 
-            val establishedTun = builder.establish() ?: throw IOException("اندروید اجازهٔ ایجاد تونل VPN را نداد.")
+            val establishedTun = builder.establish() ?: throw IOException(Lang.t("err_tun"))
             tun = establishedTun
             tunDescriptor = establishedTun
             val inputStream = FileInputStream(establishedTun.fileDescriptor)
@@ -176,8 +182,8 @@ class SoftEtherVpnService : VpnService() {
             tunInput = inputStream
             tunOutput = outputStream
             connected = true
-            publishStatus("متصل به ${host}:${port}", STATE_CONNECTED)
-            val sessionClient = client ?: throw IOException("موتور SoftEther پس از اتصال در دسترس نیست.")
+            publishStatus(Lang.t("svc_connected_to", "${host}:${port}"), STATE_CONNECTED)
+            val sessionClient = client ?: throw IOException(Lang.t("err_engine_gone"))
             val sessionHandle = handle
 
             // The native protocol uses blocking socket reads; keep the CPU awake while this
@@ -191,11 +197,11 @@ class SoftEtherVpnService : VpnService() {
                 while (running && connected) {
                     try { Thread.sleep(STATS_INTERVAL_MS) } catch (_: InterruptedException) { break }
                     if (!running || !connected) break
-                    if (++ticks % 10 == 0) {
-                        Log.i(TAG, "diag/10s total: rxCalls=${rxCalls.get()} rxEmpty=${rxEmpty.get()} rxPkts=${rxPackets.get()} txPkts=${txPackets.get()}")
+                    if (++ticks % 60 == 0) {
+                        Log.i(TAG, "diag/60s total: rxCalls=${rxCalls.get()} rxEmpty=${rxEmpty.get()} rxPkts=${rxPackets.get()} txPkts=${txPackets.get()}")
                     }
                     // Nobody sees the speed meter while the screen is off; skip the work.
-                    if (powerManager?.isInteractive == false) {
+                    if (!uiVisible || powerManager?.isInteractive == false) {
                         previousTx = txBytes.get(); previousRx = rxBytes.get(); previousTime = SystemClock.elapsedRealtime()
                         continue
                     }
@@ -220,18 +226,26 @@ class SoftEtherVpnService : VpnService() {
             val output = outputStream
             inboundThread = Thread({
                 try {
-                    val buffer = ByteArray(PACKET_BUFFER_SIZE)
-                    // Adaptive back-off: poll fast while traffic flows, slow down when idle so the
-                    // CPU is not woken ~200x/second for nothing (this caused the "high CPU" warning).
+                    // Batch receive: one JNI call returns up to RX_BATCH_PACKETS IP packets
+                    // (Ethernet header already stripped natively); each is written to the TUN
+                    // as its own packet. Far fewer JNI crossings and wakeups under load.
+                    val buffer = ByteArray(RX_BATCH_BUFFER_SIZE)
+                    val lengths = IntArray(RX_BATCH_PACKETS)
                     var idleSleepMs = RECEIVE_IDLE_SLEEP_MIN_MS
                     while (running) {
                         val startedAt = SystemClock.elapsedRealtime()
-                        val count = sessionClient.nativeReceive(sessionHandle, buffer, buffer.size)
+                        val count = sessionClient.nativeReceiveBatch(sessionHandle, buffer, buffer.size, lengths, lengths.size)
                         rxCalls.incrementAndGet()
                         when {
                             count > 0 -> {
-                                output.write(buffer, 0, count); rxBytes.addAndGet(count.toLong())
-                                rxPackets.incrementAndGet()
+                                var offset = 0
+                                for (len in lengths) {
+                                    if (len <= 0) break
+                                    output.write(buffer, offset, len)
+                                    offset += len
+                                    rxPackets.incrementAndGet()
+                                }
+                                rxBytes.addAndGet(count.toLong())
                                 idleSleepMs = RECEIVE_IDLE_SLEEP_MIN_MS
                             }
                             count == 0 -> {
@@ -247,11 +261,11 @@ class SoftEtherVpnService : VpnService() {
                                     idleSleepMs = (idleSleepMs * 2).coerceAtMost(RECEIVE_IDLE_SLEEP_MAX_MS)
                                 }
                             }
-                            else -> throw IOException("ارتباط داده‌ای SoftEther قطع شد.")
+                            else -> throw IOException(Lang.t("err_link_lost"))
                         }
                     }
                 } catch (e: Exception) {
-                    if (running) failPacketLoop("دریافت از تونل ناموفق بود: ${e.message}", loopFailure)
+                    if (running) failPacketLoop(Lang.t("err_rx", e.message ?: ""), loopFailure)
                 }
             }, "opensstp-softether-rx").apply { isDaemon = true }
 
@@ -263,13 +277,13 @@ class SoftEtherVpnService : VpnService() {
                         if (count < 0) break
                         if (count == 0) { Thread.sleep(1L); continue }
                         val sent = sessionClient.nativeSendSlice(sessionHandle, buffer, 0, count)
-                        if (sent != count) throw IOException("ارسال بسته به موتور SoftEther کامل نشد (sent=$sent, expected=$count).")
+                        if (sent != count) throw IOException(Lang.t("err_tx_send", sent, count))
                         txBytes.addAndGet(count.toLong())
                         txPackets.incrementAndGet()
                     }
-                    if (running) throw IOException("ورودی تونل اندروید بسته شد.")
+                    if (running) throw IOException(Lang.t("err_tun_closed"))
                 } catch (e: Exception) {
-                    if (running) failPacketLoop("ارسال ترافیک به تونل ناموفق بود: ${e.message}", loopFailure)
+                    if (running) failPacketLoop(Lang.t("err_tx", e.message ?: ""), loopFailure)
                 }
             }, "opensstp-softether-tx").apply { isDaemon = true }
 
@@ -281,10 +295,10 @@ class SoftEtherVpnService : VpnService() {
             loopFailure.get()?.let { throw IOException(it) }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
-            if (running) failureMessage = "فرایند اتصال متوقف شد."
+            if (running) failureMessage = Lang.t("err_stopped")
         } catch (e: Exception) {
             if (running || loopFailure.get() != null) {
-                failureMessage = loopFailure.get() ?: (e.message ?: "اتصال VPN ناموفق بود.")
+                failureMessage = loopFailure.get() ?: (e.message ?: Lang.t("err_vpn_failed"))
             }
             Log.e(TAG, "SoftEther session ended", e)
         } finally {
@@ -305,7 +319,7 @@ class SoftEtherVpnService : VpnService() {
             nativeClient = null
             releaseCpuWakeLock()
 
-            val finalMessage = failureMessage ?: "قطع شد"
+            val finalMessage = failureMessage ?: Lang.t("disconnected")
             publishStatus(finalMessage, if (failureMessage == null) STATE_DISCONNECTED else STATE_ERROR)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -318,9 +332,9 @@ class SoftEtherVpnService : VpnService() {
         client.nativeGetAllSocketFds(handle)?.filter { it >= 0 }?.forEach(descriptors::add)
         client.nativeGetRudpSocketFd(handle).takeIf { it >= 0 }?.let(descriptors::add)
         client.nativeGetNatTUdpSocketFd(handle).takeIf { it >= 0 }?.let(descriptors::add)
-        if (descriptors.isEmpty()) throw IOException("موتور SoftEther هیچ سوکت شبکهٔ فعالی گزارش نکرد.")
+        if (descriptors.isEmpty()) throw IOException(Lang.t("err_no_socket"))
         descriptors.forEach { fd ->
-            if (!protect(fd)) throw IOException("اندروید نتوانست سوکت موتور SoftEther (fd=$fd) را از تونل VPN مستثنا کند.")
+            if (!protect(fd)) throw IOException(Lang.t("err_protect", fd))
         }
     }
 
@@ -337,12 +351,12 @@ class SoftEtherVpnService : VpnService() {
 
     private fun requestDisconnect() {
         if (!running && nativeHandle == 0L) {
-            publishStatus("قطع است", STATE_DISCONNECTED)
+            publishStatus(Lang.t("disconnected"), STATE_DISCONNECTED)
             stopForeground(STOP_FOREGROUND_REMOVE)
             return
         }
         running = false
-        publishStatus("در حال قطع اتصال…", STATE_DISCONNECTED)
+        publishStatus(Lang.t("disconnecting"), STATE_DISCONNECTED)
         try { tunDescriptor?.close() } catch (_: Exception) { }
         val client = nativeClient
         val handle = nativeHandle
@@ -456,33 +470,33 @@ class SoftEtherVpnService : VpnService() {
 
     private fun parseServer(raw: String): ServerAddress {
         val value = raw.trim()
-        require(value.isNotEmpty()) { "آدرس سرور را وارد کنید." }
-        require(!value.contains("://")) { "فقط نام میزبان یا IP را وارد کنید؛ بدون https://." }
+        require(value.isNotEmpty()) { Lang.t("srv_empty") }
+        require(!value.contains("://")) { Lang.t("srv_scheme") }
 
         val host: String
         val port: Int
         if (value.startsWith("[")) {
             val end = value.indexOf(']')
-            require(end > 1) { "آدرس IPv6 داخل کروشه معتبر نیست." }
+            require(end > 1) { Lang.t("srv_ipv6") }
             host = value.substring(1, end)
             val suffix = value.substring(end + 1)
             port = if (suffix.isEmpty()) DEFAULT_PORT else {
-                require(suffix.startsWith(":")) { "پورت سرور معتبر نیست." }
-                suffix.drop(1).toIntOrNull() ?: throw IllegalArgumentException("پورت سرور باید عددی باشد.")
+                require(suffix.startsWith(":")) { Lang.t("srv_port_bad") }
+                suffix.drop(1).toIntOrNull() ?: throw IllegalArgumentException(Lang.t("srv_port_num"))
             }
         } else {
             val lastColon = value.lastIndexOf(':')
             if (lastColon > 0 && value.indexOf(':') == lastColon) {
                 host = value.substring(0, lastColon)
                 port = value.substring(lastColon + 1).toIntOrNull()
-                    ?: throw IllegalArgumentException("پورت سرور باید عددی باشد.")
+                    ?: throw IllegalArgumentException(Lang.t("srv_port_num"))
             } else {
                 host = value
                 port = DEFAULT_PORT
             }
         }
-        require(host.isNotBlank()) { "نام میزبان خالی است." }
-        require(port in 1..65535) { "پورت سرور باید بین 1 تا 65535 باشد." }
+        require(host.isNotBlank()) { Lang.t("srv_host_empty") }
+        require(port in 1..65535) { Lang.t("srv_port_range") }
         return ServerAddress(host, port)
     }
 
@@ -506,6 +520,8 @@ class SoftEtherVpnService : VpnService() {
         private const val TUN_MTU = 1400
         private const val IPV6_TUN_ADDRESS = "fd42:6f70:656e:5353::2"
         private const val PACKET_BUFFER_SIZE = 32768
+        private const val RX_BATCH_BUFFER_SIZE = 65536
+        private const val RX_BATCH_PACKETS = 32
         private const val RECEIVE_IDLE_SLEEP_MIN_MS = 1L
         private const val RECEIVE_IDLE_SLEEP_MAX_MS = 5L
         private const val STATS_INTERVAL_MS = 1000L
@@ -528,6 +544,10 @@ class SoftEtherVpnService : VpnService() {
         /** Epoch millis when the current tunnel became connected, or 0 when not connected. */
         @Volatile
         var connectedSinceMs: Long = 0L
+
+        /** True only while MainActivity is on screen; the speed meter is skipped otherwise. */
+        @Volatile
+        var uiVisible: Boolean = false
         const val STATE_CONNECTING = "connecting"
         const val STATE_CONNECTED = "connected"
         const val STATE_DISCONNECTED = "disconnected"

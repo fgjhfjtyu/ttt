@@ -55,6 +55,41 @@ object Lang {
 
     private fun e(vararg s: String): Array<out String> = s
 
+    private val defaultNameRegexes: List<Regex> by lazy {
+        TABLE["config_n"].orEmpty().filter { it.contains("%d") }.map { pat ->
+            val parts = pat.split("%d", limit = 2)
+            Regex("^" + Regex.escape(parts[0]) + "([0-9]+)" + Regex.escape(parts.getOrElse(1) { "" }) + "$")
+        }
+    }
+
+    /**
+     * Name of a saved config as shown in the current language. Default names ("Config 3") and
+     * country names that were saved in another language are re-translated; custom names are kept.
+     * The stored name is never changed, so selecting and deleting keep working.
+     */
+    fun configLabel(name: String, cc: String = ""): String {
+        val trimmed = name.trim()
+        for (r in defaultNameRegexes) {
+            val m = r.find(trimmed) ?: continue
+            return t("config_n", m.groupValues[1].toInt())
+        }
+        if (cc.length == 2) {
+            val now = java.util.Locale("", cc).getDisplayCountry(java.util.Locale(LANGS[index].code))
+            if (now.isNotBlank() && now != cc) {
+                for (l in LANGS) {
+                    val old = java.util.Locale("", cc).getDisplayCountry(java.util.Locale(l.code))
+                    if (old.isBlank() || old == cc) continue
+                    if (trimmed == old) return now
+                    if (trimmed.startsWith("$old ")) {
+                        val rest = trimmed.substring(old.length + 1)
+                        if (rest.isNotEmpty() && rest.all { it.isDigit() }) return "$now $rest"
+                    }
+                }
+            }
+        }
+        return name
+    }
+
     private val TABLE: Map<String, Array<out String>> = mapOf(
         // ── language menu ──
         "language" to e("انتخاب زبان", "Select language", "اختيار اللغة", "Dil seç", "Sprache wählen", "Choisir la langue", "Elegir idioma", "Выбрать язык", "言語を選択", "选择语言"),
@@ -210,6 +245,39 @@ object Lang {
         "g_sort_speed" to e("سریع‌ترین", "Fastest", "الأسرع", "En hızlı", "Am schnellsten", "Le plus rapide", "Más rápido", "Самые быстрые", "高速順", "速度最快"),
         "g_none" to e("موردی پیدا نشد.", "Nothing found.", "لا توجد نتائج.", "Sonuç bulunamadı.", "Nichts gefunden.", "Aucun résultat.", "No se encontró nada.", "Ничего не найдено.", "見つかりませんでした。", "未找到结果。"),
         "g_more" to e("برای دیدن بقیه، جستجو کنید (%d مورد دیگر)", "Search to see the rest (%d more)", "ابحث لرؤية الباقي (%d أخرى)", "Gerisini görmek için arayın (%d tane daha)", "Suchen, um den Rest zu sehen (%d weitere)", "Recherchez pour voir le reste (%d de plus)", "Busca para ver el resto (%d más)", "Используйте поиск, чтобы увидеть остальные (ещё %d)", "残りは検索して表示(あと %d 件)", "搜索以查看其余结果(还有 %d 项)"),
+        // ── runtime messages (service, ping, VPN Gate) ──
+        "ping_invalid" to e("آدرس نامعتبر", "Invalid address", "عنوان غير صالح", "Geçersiz adres", "Ungültige Adresse", "Adresse invalide", "Dirección no válida", "Неверный адрес", "無効なアドレス", "地址无效"),
+        "ping_dns" to e("DNS ناموفق", "DNS failed", "فشل DNS", "DNS başarısız", "DNS fehlgeschlagen", "Échec DNS", "Error de DNS", "Ошибка DNS", "DNS失敗", "DNS 失败"),
+        "ping_noresp" to e("بدون پاسخ", "No response", "لا توجد استجابة", "Yanıt yok", "Keine Antwort", "Aucune réponse", "Sin respuesta", "Нет ответа", "応答なし", "无响应"),
+        "svc_in_progress" to e("اتصال در حال انجام است", "Connection in progress", "الاتصال قيد التنفيذ", "Bağlantı sürüyor", "Verbindung läuft", "Connexion en cours", "Conexión en curso", "Подключение выполняется", "接続中です", "正在连接"),
+        "svc_connecting_to" to e("در حال اتصال به %s", "Connecting to %s", "جارٍ الاتصال بـ %s", "%s sunucusuna bağlanılıyor", "Verbindung zu %s…", "Connexion à %s", "Conectando a %s", "Подключение к %s", "%s に接続中", "正在连接 %s"),
+        "svc_getting_ip" to e("اتصال برقرار شد؛ دریافت تنظیمات IP از سرور…", "Connected; getting IP settings from the server…", "تم الاتصال؛ جارٍ الحصول على إعدادات IP من الخادم…", "Bağlandı; sunucudan IP ayarları alınıyor…", "Verbunden; IP-Einstellungen werden vom Server abgerufen…", "Connecté ; récupération des paramètres IP depuis le serveur…", "Conectado; obteniendo la configuración IP del servidor…", "Подключено; получение настроек IP от сервера…", "接続しました。サーバーからIP設定を取得中…", "已连接；正在从服务器获取 IP 设置…"),
+        "svc_connected_to" to e("متصل به %s", "Connected to %s", "متصل بـ %s", "%s sunucusuna bağlı", "Verbunden mit %s", "Connecté à %s", "Conectado a %s", "Подключено к %s", "%s に接続済み", "已连接到 %s"),
+        "svc_cancelled" to e("اتصال توسط کاربر لغو شد.", "Connection was cancelled by the user."),
+        "err_engine_create" to e("موتور بومی SoftEther نتوانست نشست ایجاد کند.", "The native SoftEther engine could not create a session."),
+        "err_connect_failed" to e("اتصال SoftEther انجام نشد (کد خطا: %d). آدرس، پورت، Hub و اطلاعات ورود را بررسی کنید.", "SoftEther connection failed (error code: %d). Check the address, port, hub and login details."),
+        "err_no_dhcp" to e("سرور SoftEther اتصال را پذیرفت، اما DHCP نشانی IP معتبر نداد؛ تونل اینترنت ساخته نشد.", "The SoftEther server accepted the connection but did not provide a valid IP via DHCP; the internet tunnel was not created."),
+        "err_bad_ip" to e("پیکربندی IP دریافت‌شده از سرور معتبر نیست.", "The IP configuration received from the server is not valid."),
+        "err_tun" to e("اندروید اجازهٔ ایجاد تونل VPN را نداد.", "Android did not allow the VPN tunnel to be created."),
+        "err_engine_gone" to e("موتور SoftEther پس از اتصال در دسترس نیست.", "The SoftEther engine is unavailable after connecting."),
+        "err_link_lost" to e("ارتباط داده‌ای SoftEther قطع شد.", "The SoftEther data link was lost."),
+        "err_rx" to e("دریافت از تونل ناموفق بود: %s", "Receiving from the tunnel failed: %s"),
+        "err_tx_send" to e("ارسال بسته به موتور SoftEther کامل نشد (sent=%d, expected=%d).", "Sending the packet to the SoftEther engine was incomplete (sent=%d, expected=%d)."),
+        "err_tun_closed" to e("ورودی تونل اندروید بسته شد.", "The Android tunnel input was closed."),
+        "err_tx" to e("ارسال ترافیک به تونل ناموفق بود: %s", "Sending traffic to the tunnel failed: %s"),
+        "err_stopped" to e("فرایند اتصال متوقف شد.", "The connection process was stopped."),
+        "err_vpn_failed" to e("اتصال VPN ناموفق بود.", "The VPN connection failed."),
+        "err_no_socket" to e("موتور SoftEther هیچ سوکت شبکهٔ فعالی گزارش نکرد.", "The SoftEther engine reported no active network socket."),
+        "err_protect" to e("اندروید نتوانست سوکت موتور SoftEther (fd=%d) را از تونل VPN مستثنا کند.", "Android could not exclude the SoftEther engine socket (fd=%d) from the VPN tunnel."),
+        "srv_empty" to e("آدرس سرور را وارد کنید.", "Enter the server address."),
+        "srv_scheme" to e("فقط نام میزبان یا IP را وارد کنید؛ بدون https://.", "Enter only the hostname or IP, without https://."),
+        "srv_ipv6" to e("آدرس IPv6 داخل کروشه معتبر نیست.", "The IPv6 address in brackets is not valid."),
+        "srv_port_bad" to e("پورت سرور معتبر نیست.", "The server port is not valid."),
+        "srv_port_num" to e("پورت سرور باید عددی باشد.", "The server port must be a number."),
+        "srv_host_empty" to e("نام میزبان خالی است.", "The hostname is empty."),
+        "srv_port_range" to e("پورت سرور باید بین 1 تا 65535 باشد.", "The server port must be between 1 and 65535."),
+        "gate_err_https" to e("آدرس منبع باید با https:// شروع شود", "The source address must start with https://"),
+        "gate_err_empty" to e("فهرست خالی بود", "The list was empty"),
         "g_save_desc" to e("ذخیرهٔ کانفیگ", "Save config", "حفظ الإعداد", "Yapılandırmayı kaydet", "Konfiguration speichern", "Enregistrer la config", "Guardar configuración", "Сохранить конфигурацию", "設定を保存", "保存配置")
     )
 }

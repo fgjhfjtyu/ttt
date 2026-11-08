@@ -68,15 +68,15 @@ object PingProbe {
 
     /** Blocking; call from a background thread. */
     fun measure(context: Context, rawServer: String): Result {
-        val (host, port) = parse(rawServer) ?: return Result.Failed("آدرس نامعتبر")
+        val (host, port) = parse(rawServer) ?: return Result.Failed(Lang.t("ping_invalid"))
         val network = underlyingNetwork(context)
 
         val addresses: Array<InetAddress> = try {
             network?.getAllByName(host) ?: InetAddress.getAllByName(host)
         } catch (_: Exception) {
-            return Result.Failed("DNS ناموفق")
+            return Result.Failed(Lang.t("ping_dns"))
         }
-        val target = addresses.firstOrNull() ?: return Result.Failed("DNS ناموفق")
+        val target = addresses.firstOrNull() ?: return Result.Failed(Lang.t("ping_dns"))
 
         val times = ArrayList<Int>(SAMPLES)
         for (i in 0 until SAMPLES) {
@@ -99,7 +99,7 @@ object PingProbe {
             }
         }
 
-        if (times.isEmpty()) return Result.Failed("بدون پاسخ")
+        if (times.isEmpty()) return Result.Failed(Lang.t("ping_noresp"))
         times.sort()
         val median = if (times.size % 2 == 1) times[times.size / 2]
         else (times[times.size / 2 - 1] + times[times.size / 2]) / 2

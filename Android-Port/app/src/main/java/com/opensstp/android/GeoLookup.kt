@@ -26,7 +26,7 @@ object Net {
                     val n = input.read(buf)
                     if (n < 0) break
                     out.write(buf, 0, n)
-                    if (out.size() > maxBytes) throw java.io.IOException("پاسخ بیش از حد بزرگ است")
+                    if (out.size() > maxBytes) throw java.io.IOException("Response too large")
                 }
                 out.toString("UTF-8")
             }

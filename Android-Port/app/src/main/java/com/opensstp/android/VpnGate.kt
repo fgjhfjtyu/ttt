@@ -70,9 +70,9 @@ object VpnGate {
     /** Downloads and parses the list from the configured source. Blocking. Throws on failure. */
     fun fetch(context: Context): List<VpnGateServer> {
         val url = sourceUrl(context)
-        if (!url.startsWith("https://")) throw java.io.IOException("آدرس منبع باید با https:// شروع شود")
+        if (!url.startsWith("https://")) throw java.io.IOException(Lang.t("gate_err_https"))
         val servers = parse(Net.get(url, timeoutMs = 15000))
-        if (servers.isEmpty()) throw java.io.IOException("فهرست خالی بود")
+        if (servers.isEmpty()) throw java.io.IOException(Lang.t("gate_err_empty"))
         saveCache(context, servers)
         return servers
     }

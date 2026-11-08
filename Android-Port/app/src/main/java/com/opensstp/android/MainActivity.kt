@@ -404,6 +404,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        SoftEtherVpnService.uiVisible = true
         ContextCompat.registerReceiver(
             this,
             statusReceiver,
@@ -415,6 +416,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        SoftEtherVpnService.uiVisible = false
         try { unregisterReceiver(statusReceiver) } catch (_: IllegalArgumentException) { }
         timerRunning = false
         tickHandler.removeCallbacks(tick)
@@ -936,6 +938,7 @@ class MainActivity : ComponentActivity() {
             val item = configs.optJSONObject(i) ?: continue
             val configName = item.optString("name", Lang.t("config_n", i + 1))
             val configServer = item.optString("server", "")
+            val shownName = Lang.configLabel(configName, item.optString("cc", ""))
             val selected = configName == selectedConfig
             val hi = if (selected && sessionCanBeStopped) Ui.GREEN else Ui.ACCENT
 
@@ -962,7 +965,7 @@ class MainActivity : ComponentActivity() {
                     username.setText(item.optString("username", ""))
                     password.setText(item.optString("password", ""))
                     renderConfigs(prefs)
-                    Toast.makeText(this@MainActivity, Lang.t("cfg_selected", configName), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, Lang.t("cfg_selected", shownName), Toast.LENGTH_SHORT).show()
                 }
             }
 
@@ -982,7 +985,7 @@ class MainActivity : ComponentActivity() {
             }
 
             val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            texts.addView(label(configName, 14f, Ui.TEXT, bold = true).apply {
+            texts.addView(label(shownName, 14f, Ui.TEXT, bold = true).apply {
                 isSingleLine = true
                 ellipsize = TextUtils.TruncateAt.END
             })
@@ -1005,11 +1008,11 @@ class MainActivity : ComponentActivity() {
 
             val deleteButton = FrameLayout(this).apply {
                 isClickable = true
-                contentDescription = Lang.t("delete_desc", configName)
+                contentDescription = Lang.t("delete_desc", shownName)
                 background = Ui.ripple(this@MainActivity, Ui.oval(Ui.alpha(Ui.RED, 28)), 19f)
                 setOnClickListener {
                     AlertDialog.Builder(this@MainActivity)
-                        .setMessage(Lang.t("delete_ask", configName))
+                        .setMessage(Lang.t("delete_ask", shownName))
                         .setNegativeButton(Lang.t("cancel"), null)
                         .setPositiveButton(Lang.t("delete")) { _, _ ->
                             val current = readConfigs(prefs)

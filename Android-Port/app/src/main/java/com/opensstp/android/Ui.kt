@@ -506,7 +506,7 @@ object Flags {
 
     /** Country name in Persian (falls back to [fallback] / the code itself). */
     fun displayName(cc: String, fallback: String = ""): String {
-        val n = java.util.Locale("", cc).getDisplayCountry(java.util.Locale("fa"))
+        val n = java.util.Locale("", cc).getDisplayCountry(java.util.Locale(Lang.LANGS[Lang.current].code))
         return if (n.isNotBlank() && n != cc) n else fallback.ifBlank { cc }
     }
 
